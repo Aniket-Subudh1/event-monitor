@@ -6,12 +6,102 @@ const SentimentRecord = require('../../models/SentimentRecord');
 const Feedback = require('../../models/Feedback');
 const logger = require('../../utils/logger');
 
-const feedbackQueue = new Queue('feedback-processing', process.env.REDIS_URL || 'redis://localhost:6379');
+// Define InMemoryQueue class for fallback when Redis is not available
+class InMemoryQueue {
+  constructor() {
+    this._jobs = [];
+    this._processCallback = null;
+    this._eventCallbacks = {};
+    logger.warn('Using in-memory queue (Redis not available)');
+  }
 
+  add(data, options = {}) {
+    const id = `mem_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const job = { id, data };
+    
+    this._jobs.push(job);
+    logger.info(`Added job ${id} to in-memory queue`);
+    
+    // Process immediately if a processor is registered
+    if (this._processCallback) {
+      setTimeout(() => {
+        try {
+          Promise.resolve(this._processCallback(job))
+            .then(result => {
+              if (this._eventCallbacks['completed']) {
+                this._eventCallbacks['completed'](job, result);
+              }
+            })
+            .catch(error => {
+              if (this._eventCallbacks['failed']) {
+                this._eventCallbacks['failed'](job, error);
+              }
+            });
+        } catch (error) {
+          if (this._eventCallbacks['failed']) {
+            this._eventCallbacks['failed'](job, error);
+          }
+        }
+      }, 100);
+    }
+    
+    return Promise.resolve(job);
+  }
+
+  process(callback) {
+    this._processCallback = callback;
+  }
+
+  on(event, callback) {
+    this._eventCallbacks[event] = callback;
+  }
+
+  getJobCounts() {
+    return Promise.resolve({ 
+      waiting: this._jobs.length, 
+      active: 0, 
+      completed: 0, 
+      failed: 0 
+    });
+  }
+
+  getCompleted() {
+    return Promise.resolve([]);
+  }
+
+  getFailed() {
+    return Promise.resolve([]);
+  }
+
+  getDelayed() {
+    return Promise.resolve([]);
+  }
+
+  getActive() {
+    return Promise.resolve([]);
+  }
+}
+
+// Use a try-catch to handle Redis connection errors
+let feedbackQueue;
+
+try {
+  if (process.env.REDIS_URL || (process.env.NODE_ENV === 'production')) {
+    // Use real Bull queue with Redis in production or when Redis URL is specified
+    feedbackQueue = new Queue('feedback-processing', process.env.REDIS_URL || 'redis://localhost:6379');
+    logger.info('Connected to Redis for feedback queue');
+  } else {
+    // Use in-memory queue implementation for development
+    feedbackQueue = new InMemoryQueue();
+  }
+} catch (error) {
+  logger.error(`Failed to connect to Redis: ${error.message}`);
+  // Fallback to in-memory queue
+  feedbackQueue = new InMemoryQueue();
+}
 
 exports.addToQueue = async (feedbackData) => {
   try {
-   
     const job = await feedbackQueue.add(feedbackData, {
       priority: 2,
       attempts: 3,
@@ -34,7 +124,6 @@ exports.addToQueue = async (feedbackData) => {
     throw error;
   }
 };
-
 
 exports.addWithHighPriority = async (feedbackData) => {
   try {
@@ -60,7 +149,6 @@ exports.addWithHighPriority = async (feedbackData) => {
     throw error;
   }
 };
-
 
 exports.startProcessing = (io) => {
   feedbackQueue.process(async (job) => {
@@ -132,7 +220,6 @@ const updateSentimentRecords = async (feedback) => {
   }
 };
 
-
 exports.getQueueStatus = async () => {
   try {
     const [
@@ -161,7 +248,6 @@ exports.getQueueStatus = async () => {
     throw error;
   }
 };
-
 
 exports.cleanFailedJobs = async () => {
   try {

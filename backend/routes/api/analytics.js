@@ -72,3 +72,5 @@ router.get('/wordcloud/:eventId',
   checkEventOwnership({ idField: 'eventId' }),
   analyticsController.getWordCloudData
 );
+
+module.exports = router;

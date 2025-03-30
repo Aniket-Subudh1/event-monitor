@@ -8,6 +8,7 @@ const alertsRoutes = require('./api/alerts');
 const analyticsRoutes = require('./api/analytics');
 const integrationsRoutes = require('./api/integrations');
 
+// Make sure all imported routes are properly initialized Express routers
 router.use('/auth', authRoutes);
 router.use('/events', eventsRoutes);
 router.use('/feedback', feedbackRoutes);
@@ -15,6 +16,7 @@ router.use('/alerts', alertsRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/integrations', integrationsRoutes);
 
+// Simple health check endpoint
 router.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -24,6 +26,7 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Documentation endpoint
 router.get('/docs', (req, res) => {
   res.status(200).json({
     success: true,
