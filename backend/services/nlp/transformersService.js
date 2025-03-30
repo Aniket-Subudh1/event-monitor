@@ -1,4 +1,3 @@
-// backend/services/nlp/transformersService.js
 let pipelineFunction;
 try {
   pipelineFunction = require('@xenova/transformers').pipeline;

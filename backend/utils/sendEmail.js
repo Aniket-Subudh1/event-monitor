@@ -1,4 +1,3 @@
-// backend/utils/sendEmail.js
 const nodemailer = require('nodemailer');
 const logger = require('./logger');
 
@@ -16,11 +15,11 @@ const sendEmail = async (options) => {
       };
     } else {
       transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
-        port: process.env.SMTP_PORT || 2525,
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
         auth: {
-          user: process.env.SMTP_USER || '',
-          pass: process.env.SMTP_PASSWORD || ''
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD
         }
       });
     }
@@ -39,7 +38,7 @@ const sendEmail = async (options) => {
     return info;
   } catch (error) {
     logger.error(`Error sending email: ${error.message}`, { error });
-    // Instead of throwing, return an object with the error
+
     return { error: error.message, success: false };
   }
 };
