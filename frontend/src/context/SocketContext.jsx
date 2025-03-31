@@ -50,8 +50,11 @@ export const SocketProvider = ({ children }) => {
   // Join event room when selected event changes
   useEffect(() => {
     if (socket && connected && selectedEvent) {
-      socketService.joinEvent(selectedEvent.id);
-      socketService.subscribeToAlerts(selectedEvent.id);
+      // Make sure we're using _id, not id
+      socketService.joinEvent(selectedEvent._id);
+      socketService.subscribeToAlerts(selectedEvent._id);
+      
+      console.log(`Joined event room: ${selectedEvent._id}`);
     }
   }, [socket, connected, selectedEvent]);
 
@@ -65,11 +68,17 @@ export const SocketProvider = ({ children }) => {
 
   const handleAlertUpdate = (alert) => {
     // Handle alert updates
+    console.log('Alert updated:', alert);
   };
 
   const submitFeedback = async (feedbackData) => {
     if (!connected || !socket) {
       throw new Error('Socket not connected');
+    }
+    
+    // Make sure we're using the correct event ID
+    if (selectedEvent && feedbackData.event === undefined) {
+      feedbackData.event = selectedEvent._id;
     }
     
     return socketService.submitFeedback(feedbackData);

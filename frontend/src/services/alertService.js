@@ -9,9 +9,14 @@ const alertService = {
    */
   getEventAlerts: async (eventId, params = {}) => {
     try {
+      if (!eventId) {
+        throw new Error('Event ID is required for fetching alerts');
+      }
+      
       const response = await api.get(`/alerts/event/${eventId}`, { params });
       return response.data;
     } catch (error) {
+      console.error('Error in getEventAlerts:', error);
       throw error.response?.data?.message || 'Failed to fetch alerts';
     }
   },
@@ -23,9 +28,14 @@ const alertService = {
    */
   getActiveAlertCount: async (eventId) => {
     try {
+      if (!eventId) {
+        throw new Error('Event ID is required for fetching alert counts');
+      }
+      
       const response = await api.get(`/alerts/event/${eventId}/count`);
       return response.data.data;
     } catch (error) {
+      console.error('Error in getActiveAlertCount:', error);
       throw error.response?.data?.message || 'Failed to fetch alert count';
     }
   },
@@ -97,6 +107,10 @@ const alertService = {
    */
   createAlert: async (alertData) => {
     try {
+      if (!alertData.event) {
+        throw new Error('Event ID is required for creating an alert');
+      }
+      
       const response = await api.post('/alerts', alertData);
       return response.data.data;
     } catch (error) {

@@ -82,11 +82,17 @@ class SocketService {
    */
   joinEvent(eventId) {
     if (!this.socket || !this.isConnected) {
-      console.warn('Socket not connected');
+      console.warn('Socket not connected when trying to join event:', eventId);
       return;
     }
 
-    this.socket.emit('join-event', { eventId });
+    if (!eventId) {
+      console.warn('Attempted to join event with undefined ID');
+      return;
+    }
+
+    console.log('Joining event:', eventId);
+    this.socket.emit('join-event', { eventId, userId: this.getUserId() });
     this.connectedEvents.add(eventId);
   }
 
@@ -96,6 +102,11 @@ class SocketService {
    */
   leaveEvent(eventId) {
     if (!this.socket || !this.isConnected) {
+      return;
+    }
+
+    if (!eventId) {
+      console.warn('Attempted to leave event with undefined ID');
       return;
     }
 
@@ -109,10 +120,16 @@ class SocketService {
    */
   subscribeToAlerts(eventId) {
     if (!this.socket || !this.isConnected) {
-      console.warn('Socket not connected');
+      console.warn('Socket not connected when trying to subscribe to alerts for event:', eventId);
       return;
     }
 
+    if (!eventId) {
+      console.warn('Attempted to subscribe to alerts with undefined event ID');
+      return;
+    }
+
+    console.log('Subscribing to alerts for event:', eventId);
     this.socket.emit('subscribe-alerts', { eventId });
   }
 
@@ -159,7 +176,12 @@ class SocketService {
     }
 
     return new Promise((resolve, reject) => {
-      this.socket.emit('update-alert', { alertId, status, note });
+      this.socket.emit('update-alert', { 
+        alertId, 
+        status, 
+        note,
+        userId: this.getUserId()
+      });
       
       // Set up one-time listener for confirmation
       this.socket.once('alert-update-confirmed', (data) => {
@@ -176,6 +198,24 @@ class SocketService {
         reject('Timeout while updating alert');
       }, 5000);
     });
+  }
+
+  /**
+   * Get the current user ID from localStorage
+   * @returns {string|null} User ID
+   */
+  getUserId() {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user._id;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting user ID:', error);
+      return null;
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback, memo } from 'react';
 import { EventContext } from '../context/EventContext';
 import { SocketContext } from '../context/SocketContext';
 import { Card } from '../components/common/Card';
@@ -29,96 +29,76 @@ import {
   Info
 } from 'react-feather';
 
+// Utility functions
 const getSeverityIcon = (severity) => {
   switch (severity) {
-    case 'critical':
-      return <AlertCircle className="text-red-600" />;
-    case 'high':
-      return <AlertTriangle className="text-orange-500" />;
-    case 'medium':
-      return <AlertTriangle className="text-yellow-500" />;
+    case 'critical': return <AlertCircle className="text-red-600" />;
+    case 'high': return <AlertTriangle className="text-orange-500" />;
+    case 'medium': return <AlertTriangle className="text-yellow-500" />;
     case 'low':
-    default:
-      return <Info className="text-blue-500" />;
+    default: return <Info className="text-blue-500" />;
   }
 };
 
 const getSeverityClass = (severity) => {
   switch (severity) {
-    case 'critical':
-      return 'bg-red-100 text-red-800 border-red-300';
-    case 'high':
-      return 'bg-orange-100 text-orange-800 border-orange-300';
-    case 'medium':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    case 'critical': return 'bg-red-100 text-red-800 border-red-300';
+    case 'high': return 'bg-orange-100 text-orange-800 border-orange-300';
+    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     case 'low':
-    default:
-      return 'bg-blue-100 text-blue-800 border-blue-300';
+    default: return 'bg-blue-100 text-blue-800 border-blue-300';
   }
 };
 
 const getStatusClass = (status) => {
   switch (status) {
-    case 'new':
-      return 'bg-red-100 text-red-800 border-red-300';
-    case 'acknowledged':
-      return 'bg-blue-100 text-blue-800 border-blue-300';
-    case 'inProgress':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-    case 'resolved':
-      return 'bg-green-100 text-green-800 border-green-300';
-    case 'ignored':
-      return 'bg-gray-100 text-gray-800 border-gray-300';
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-300';
+    case 'new': return 'bg-red-100 text-red-800 border-red-300';
+    case 'acknowledged': return 'bg-blue-100 text-blue-800 border-blue-300';
+    case 'inProgress': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    case 'resolved': return 'bg-green-100 text-green-800 border-green-300';
+    case 'ignored': return 'bg-gray-100 text-gray-800 border-gray-300';
+    default: return 'bg-gray-100 text-gray-800 border-gray-300';
   }
 };
 
 const formatDate = (date) => {
-  return new Date(date).toLocaleString();
+  return date ? new Date(date).toLocaleString() : 'N/A';
 };
 
 const formatDuration = (start, end) => {
   if (!start || !end) return 'N/A';
-  
   const durationMs = new Date(end) - new Date(start);
   const minutes = Math.floor(durationMs / 60000);
   
-  if (minutes < 60) {
-    return `${minutes} min${minutes !== 1 ? 's' : ''}`;
-  }
-  
+  if (minutes < 60) return `${minutes} min${minutes !== 1 ? 's' : ''}`;
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   
-  if (hours < 24) {
-    return `${hours} hr${hours !== 1 ? 's' : ''} ${remainingMinutes} min${remainingMinutes !== 1 ? 's' : ''}`;
-  }
-  
+  if (hours < 24) return `${hours} hr${hours !== 1 ? 's' : ''} ${remainingMinutes} min${remainingMinutes !== 1 ? 's' : ''}`;
   const days = Math.floor(hours / 24);
   const remainingHours = hours % 24;
-  
   return `${days} day${days !== 1 ? 's' : ''} ${remainingHours} hr${remainingHours !== 1 ? 's' : ''}`;
 };
 
-const AlertList = ({ alerts, onViewDetail, onStatusChange, onDelete, selectedIds, onSelectMultiple }) => {
+// AlertList component
+const AlertList = memo(({ alerts, onViewDetail, onStatusChange, onDelete, selectedIds, onSelectMultiple }) => {
   const isSelected = (id) => selectedIds.includes(id);
   
-  const toggleSelection = (id) => {
+  const toggleSelection = useCallback((id) => {
     if (isSelected(id)) {
       onSelectMultiple(selectedIds.filter(itemId => itemId !== id));
     } else {
       onSelectMultiple([...selectedIds, id]);
     }
-  };
+  }, [selectedIds, onSelectMultiple]);
   
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (selectedIds.length === alerts.length) {
       onSelectMultiple([]);
     } else {
       onSelectMultiple(alerts.map(item => item._id));
     }
-  };
+  }, [alerts, selectedIds, onSelectMultiple]);
   
   return (
     <div className="overflow-x-auto">
@@ -221,8 +201,9 @@ const AlertList = ({ alerts, onViewDetail, onStatusChange, onDelete, selectedIds
       </table>
     </div>
   );
-};
+});
 
+// AlertFilter component
 const AlertFilter = ({ filters, setFilters, onApplyFilters, alertTypes }) => {
   const [localFilters, setLocalFilters] = useState({ ...filters });
   
@@ -230,15 +211,15 @@ const AlertFilter = ({ filters, setFilters, onApplyFilters, alertTypes }) => {
     setLocalFilters(filters);
   }, [filters]);
   
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
-    setLocalFilters({
-      ...localFilters,
+    setLocalFilters(prev => ({
+      ...prev,
       [name]: value
-    });
-  };
+    }));
+  }, []);
   
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     const resetFilters = {
       severity: 'all',
       type: 'all',
@@ -251,13 +232,13 @@ const AlertFilter = ({ filters, setFilters, onApplyFilters, alertTypes }) => {
     setLocalFilters(resetFilters);
     setFilters(resetFilters);
     onApplyFilters(resetFilters);
-  };
+  }, [setFilters, onApplyFilters]);
   
-  const handleSubmit = (e) => {
+  const handleSubmit = useCallback((e) => {
     e.preventDefault();
     setFilters(localFilters);
     onApplyFilters(localFilters);
-  };
+  }, [localFilters, setFilters, onApplyFilters]);
   
   return (
     <Card className="mb-6">
@@ -390,6 +371,7 @@ const AlertFilter = ({ filters, setFilters, onApplyFilters, alertTypes }) => {
   );
 };
 
+// AlertDetailModal component
 const AlertDetailModal = ({ isOpen, onClose, alert, onStatusChange }) => {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -611,6 +593,7 @@ const AlertDetailModal = ({ isOpen, onClose, alert, onStatusChange }) => {
   );
 };
 
+// CreateAlertModal component
 const CreateAlertModal = ({ isOpen, onClose, onSubmit, eventId, alertTypes }) => {
   const [formData, setFormData] = useState({
     event: '',
@@ -652,6 +635,15 @@ const CreateAlertModal = ({ isOpen, onClose, onSubmit, eventId, alertTypes }) =>
       setError(null);
       await onSubmit(formData);
       onClose();
+      setFormData({
+        event: eventId || '',
+        type: 'issue',
+        severity: 'medium',
+        title: '',
+        description: '',
+        category: 'general',
+        location: ''
+      });
     } catch (err) {
       setError(err.message || 'Failed to create alert');
     } finally {
@@ -733,9 +725,10 @@ const CreateAlertModal = ({ isOpen, onClose, onSubmit, eventId, alertTypes }) =>
                 value={formData.severity}
                 onChange={handleChange}
               >
-                {alertTypes?.severities?.map(severity => (
-                  <option key={severity.id} value={severity.id}>{severity.label}</option>
-                ))}
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
               </select>
             </div>
           </div>
@@ -780,6 +773,7 @@ const CreateAlertModal = ({ isOpen, onClose, onSubmit, eventId, alertTypes }) =>
             type="button"
             variant="secondary"
             onClick={onClose}
+            disabled={loading}
           >
             Cancel
           </Button>
@@ -798,6 +792,7 @@ const CreateAlertModal = ({ isOpen, onClose, onSubmit, eventId, alertTypes }) =>
   );
 };
 
+// BatchResolveModal component
 const BatchResolveModal = ({ isOpen, onClose, selectedCount, onSubmit }) => {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
@@ -810,6 +805,7 @@ const BatchResolveModal = ({ isOpen, onClose, selectedCount, onSubmit }) => {
       setLoading(true);
       setError(null);
       await onSubmit(note);
+      setNote('');
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to resolve alerts');
@@ -857,6 +853,7 @@ const BatchResolveModal = ({ isOpen, onClose, selectedCount, onSubmit }) => {
             type="button"
             variant="secondary"
             onClick={onClose}
+            disabled={loading}
           >
             Cancel
           </Button>
@@ -875,6 +872,7 @@ const BatchResolveModal = ({ isOpen, onClose, selectedCount, onSubmit }) => {
   );
 };
 
+// DeleteConfirmationModal component
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, isMultiple, count = 1, isDeleting }) => {
   return (
     <Modal
@@ -912,6 +910,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, isMultiple, count
   );
 };
 
+// AlertStats component
 const AlertStats = ({ alertCounts }) => {
   if (!alertCounts) {
     return <Loader />;
@@ -970,6 +969,7 @@ const AlertStats = ({ alertCounts }) => {
   );
 };
 
+// Main Alerts component
 const Alerts = () => {
   const { selectedEvent } = useContext(EventContext);
   const { newAlert } = useContext(SocketContext);
@@ -989,7 +989,7 @@ const Alerts = () => {
   
   const [filters, setFilters] = useState({
     severity: 'all',
-    type: 'all', 
+    type: 'all',
     category: 'all',
     status: 'all',
     startDate: '',
@@ -1015,6 +1015,7 @@ const Alerts = () => {
         setAlertTypes(types);
       } catch (err) {
         console.error('Error loading alert types:', err);
+        setError('Failed to load alert types');
       }
     };
     
@@ -1031,7 +1032,7 @@ const Alerts = () => {
   
   // Handle new alert from socket
   useEffect(() => {
-    if (newAlert && selectedEvent && newAlert.event === selectedEvent.id) {
+    if (newAlert && selectedEvent && newAlert.event === selectedEvent._id) {
       setAlerts(prev => [newAlert, ...prev]);
       fetchAlertCounts();
     }
@@ -1049,7 +1050,6 @@ const Alerts = () => {
         limit: pagination.limit
       };
       
-      // Add filters to query params
       if (filters.severity !== 'all') queryParams.severity = filters.severity;
       if (filters.type !== 'all') queryParams.type = filters.type;
       if (filters.category !== 'all') queryParams.category = filters.category;
@@ -1058,7 +1058,7 @@ const Alerts = () => {
       if (filters.endDate) queryParams.endDate = filters.endDate;
       if (filters.search) queryParams.search = filters.search;
       
-      const response = await alertService.getEventAlerts(selectedEvent.id, queryParams);
+      const response = await alertService.getEventAlerts(selectedEvent._id, queryParams);
       
       setAlerts(response.data);
       setPagination({
@@ -1079,26 +1079,24 @@ const Alerts = () => {
     if (!selectedEvent) return;
     
     try {
-      const counts = await alertService.getActiveAlertCount(selectedEvent.id);
+      const counts = await alertService.getActiveAlertCount(selectedEvent._id);
       setAlertCounts(counts);
     } catch (err) {
       console.error('Error fetching alert counts:', err);
     }
   };
   
-  const handleApplyFilters = () => {
-    // Reset to page 1 when filters change
+  const handleApplyFilters = useCallback(() => {
     setPagination(prev => ({ ...prev, page: 1 }));
     fetchAlerts();
-  };
+  }, [fetchAlerts]);
   
-  const handlePageChange = (newPage) => {
+  const handlePageChange = useCallback((newPage) => {
     setPagination(prev => ({ ...prev, page: newPage }));
-  };
+  }, []);
   
   const handleViewDetail = async (alert) => {
     try {
-      // Fetch full alert details if we need more data
       const fullAlert = await alertService.getAlertById(alert._id);
       setSelectedAlert(fullAlert);
       setShowDetailModal(true);
@@ -1112,17 +1110,14 @@ const Alerts = () => {
     try {
       const updatedAlert = await alertService.updateAlertStatus(alertId, status, note);
       
-      // Update alerts in state
       setAlerts(prev => prev.map(alert => (
         alert._id === alertId ? updatedAlert : alert
       )));
       
-      // Update selected alert if it's the one being updated
       if (selectedAlert && selectedAlert._id === alertId) {
         setSelectedAlert(updatedAlert);
       }
       
-      // Refresh alert counts
       fetchAlertCounts();
       
       return updatedAlert;
@@ -1134,12 +1129,13 @@ const Alerts = () => {
   
   const handleCreateAlert = async (alertData) => {
     try {
+      if (selectedEvent && !alertData.event) {
+        alertData.event = selectedEvent._id;
+      }
+      
       const newAlert = await alertService.createAlert(alertData);
       
-      // Add new alert to state
       setAlerts(prev => [newAlert, ...prev]);
-      
-      // Refresh alert counts
       fetchAlertCounts();
       
       return newAlert;
@@ -1160,23 +1156,15 @@ const Alerts = () => {
       setIsDeleting(true);
       
       if (deleteMultiple) {
-        // Delete multiple alerts
         await Promise.all(selectedIds.map(id => alertService.deleteAlert(id)));
-        
-        // Update alerts in state
         setAlerts(prev => prev.filter(alert => !selectedIds.includes(alert._id)));
         setSelectedIds([]);
       } else {
-        // Delete single alert
         await alertService.deleteAlert(alertToDelete);
-        
-        // Update alerts in state
         setAlerts(prev => prev.filter(alert => alert._id !== alertToDelete));
       }
       
-      // Refresh alert counts
       fetchAlertCounts();
-      
       setShowDeleteModal(false);
     } catch (err) {
       console.error('Error deleting alert:', err);
@@ -1188,19 +1176,14 @@ const Alerts = () => {
   
   const handleResolveSelected = () => {
     if (selectedIds.length === 0) return;
-    
     setShowBatchModal(true);
   };
   
   const handleBatchResolve = async (note) => {
     try {
       await alertService.resolveMultipleAlerts(selectedIds, note);
-      
-      // Refresh data
       fetchAlerts();
       fetchAlertCounts();
-      
-      // Clear selection
       setSelectedIds([]);
     } catch (err) {
       console.error('Error resolving alerts:', err);
@@ -1210,7 +1193,6 @@ const Alerts = () => {
   
   const handleDeleteSelected = () => {
     if (selectedIds.length === 0) return;
-    
     setDeleteMultiple(true);
     setShowDeleteModal(true);
   };
@@ -1242,8 +1224,7 @@ const Alerts = () => {
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Alerts</h1>
-        
+        <h1 className="text-2xl font-bold">Alerts for {selectedEvent.name}</h1>
         <div className="flex space-x-3">
           <Button
             variant="secondary"
@@ -1253,7 +1234,6 @@ const Alerts = () => {
           >
             Refresh
           </Button>
-          
           <Button
             variant="primary"
             onClick={() => setShowCreateModal(true)}
@@ -1284,10 +1264,9 @@ const Alerts = () => {
           <div>
             <h2 className="text-lg font-medium">Alert List</h2>
             <p className="text-sm text-gray-500">
-              {pagination.total} total items • Page {pagination.page} of {pagination.totalPages}
+              {pagination.total} total items • Page {pagination.page} of {pagination.totalPages || 1}
             </p>
           </div>
-          
           {selectedIds.length > 0 && (
             <div className="flex space-x-3">
               <Button
@@ -1297,7 +1276,6 @@ const Alerts = () => {
               >
                 Resolve Selected ({selectedIds.length})
               </Button>
-              
               <Button
                 variant="danger"
                 size="sm"
@@ -1322,7 +1300,7 @@ const Alerts = () => {
             </p>
           </div>
         ) : (
-            <>
+          <>
             <AlertList
               alerts={alerts}
               onViewDetail={handleViewDetail}
@@ -1331,7 +1309,6 @@ const Alerts = () => {
               selectedIds={selectedIds}
               onSelectMultiple={setSelectedIds}
             />
-            
             {pagination.totalPages > 1 && (
               <div className="mt-4 flex justify-center">
                 <nav className="flex items-center">
@@ -1343,11 +1320,9 @@ const Alerts = () => {
                   >
                     Previous
                   </Button>
-                  
                   <span className="mx-4 text-sm text-gray-700">
                     Page {pagination.page} of {pagination.totalPages}
                   </span>
-                  
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1363,7 +1338,6 @@ const Alerts = () => {
         )}
       </Card>
       
-      {/* Modals */}
       <AlertDetailModal
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
@@ -1375,7 +1349,7 @@ const Alerts = () => {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateAlert}
-        eventId={selectedEvent.id}
+        eventId={selectedEvent._id}
         alertTypes={alertTypes}
       />
       
