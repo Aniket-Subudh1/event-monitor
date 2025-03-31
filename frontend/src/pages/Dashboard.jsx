@@ -16,6 +16,7 @@ import { Loader } from '../components/common/Loader';
 import { Calendar, Users, MessageCircle, Bell, Clock } from 'react-feather';
 
 const Dashboard = () => {
+
   const { selectedEvent } = useContext(EventContext);
   const { socket } = useContext(SocketContext);
   

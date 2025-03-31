@@ -33,11 +33,13 @@ const ProtectedRoute = ({ children }) => {
 function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
-  // Check for saved sidebar state
+  // Check for saved sidebar state or default to false (open) on first load
   useEffect(() => {
     const savedState = localStorage.getItem('sidebarCollapsed');
     if (savedState !== null) {
       setSidebarCollapsed(JSON.parse(savedState));
+    } else {
+      setSidebarCollapsed(false); // Default to open
     }
   }, []);
   
