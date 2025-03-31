@@ -5,862 +5,23 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { Loader } from '../components/common/Loader';
+import FeedbackTable from '../components/tables/FeedbackTable';
+import FeedbackForm from '../components/forms/FeedbackForm';
 import feedbackService from '../services/feedbackService';
+
+// Icons
 import { 
   MessageCircle, 
+  Filter, 
+  RefreshCw, 
+  Download, 
+  Trash2, 
+  CheckSquare, 
   Smile, 
   Meh, 
   Frown, 
-  Filter, 
-  Calendar, 
-  RefreshCw,
-  Twitter,
-  Instagram,
-  Linkedin,
-  MessageSquare,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  CheckCircle,
-  XCircle
+  Calendar 
 } from 'react-feather';
-
-const FeedbackTable = ({ feedback, onViewDetail, onProcessFeedback, onDelete, onSelectMultiple, selectedIds }) => {
-  const getSentimentIcon = (sentiment) => {
-    switch (sentiment) {
-      case 'positive':
-        return <Smile className="text-green-500" />;
-      case 'neutral':
-        return <Meh className="text-gray-500" />;
-      case 'negative':
-        return <Frown className="text-red-500" />;
-      default:
-        return <Meh className="text-gray-500" />;
-    }
-  };
-  
-  const getSourceIcon = (source) => {
-    switch (source) {
-      case 'twitter':
-        return <Twitter size={16} className="text-blue-400" />;
-      case 'instagram':
-        return <Instagram size={16} className="text-purple-500" />;
-      case 'linkedin':
-        return <Linkedin size={16} className="text-blue-700" />;
-      case 'app_chat':
-        return <MessageSquare size={16} className="text-green-500" />;
-      case 'survey':
-        return <CheckCircle size={16} className="text-orange-500" />;
-      default:
-        return <MessageCircle size={16} className="text-gray-500" />;
-    }
-  };
-  
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      dateStyle: 'short',
-      timeStyle: 'short'
-    }).format(date);
-  };
-  
-  const isSelected = (id) => selectedIds.includes(id);
-  
-  const toggleSelection = (id) => {
-    if (isSelected(id)) {
-      onSelectMultiple(selectedIds.filter(itemId => itemId !== id));
-    } else {
-      onSelectMultiple([...selectedIds, id]);
-    }
-  };
-  
-  const toggleSelectAll = () => {
-    if (selectedIds.length === feedback.length) {
-      onSelectMultiple([]);
-    } else {
-      onSelectMultiple(feedback.map(item => item._id));
-    }
-  };
-  
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th scope="col" className="w-12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              <input
-                type="checkbox"
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                checked={selectedIds.length > 0 && selectedIds.length === feedback.length}
-                onChange={toggleSelectAll}
-              />
-            </th>
-            <th scope="col" className="w-12 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Sentiment
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Feedback
-            </th>
-            <th scope="col" className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Source
-            </th>
-            <th scope="col" className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Date
-            </th>
-            <th scope="col" className="w-24 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Issue
-            </th>
-            <th scope="col" className="w-32 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {feedback.map((item) => (
-            <tr key={item._id} className={isSelected(item._id) ? 'bg-blue-50' : ''}>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  checked={isSelected(item._id)}
-                  onChange={() => toggleSelection(item._id)}
-                />
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                {getSentimentIcon(item.sentiment)}
-              </td>
-              <td className="px-6 py-4">
-                <div className="text-sm text-gray-900 line-clamp-2">{item.text}</div>
-                {item.metadata?.username && (
-                  <div className="text-xs text-gray-500">@{item.metadata.username}</div>
-                )}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="flex items-center">
-                  {getSourceIcon(item.source)}
-                  <span className="ml-1 text-xs capitalize">{item.source}</span>
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {formatDate(item.createdAt)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                {item.issueType ? (
-                  <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                    {item.issueType}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-500">None</span>
-                )}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => onViewDetail(item)}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    View
-                  </button>
-                  {!item.processed && (
-                    <button
-                      onClick={() => onProcessFeedback(item)}
-                      className="text-orange-600 hover:text-orange-800"
-                    >
-                      Process
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onDelete(item._id)}
-                    className="text-red-600 hover:text-red-800"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-const FeedbackFilter = ({ filters, setFilters, onApplyFilters }) => {
-  const [localFilters, setLocalFilters] = useState({ ...filters });
-  
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setLocalFilters({
-      ...localFilters,
-      [name]: value
-    });
-  };
-  
-  const handleReset = () => {
-    const resetFilters = {
-      sentiment: 'all',
-      source: 'all',
-      issueType: 'all',
-      startDate: '',
-      endDate: '',
-      search: ''
-    };
-    setLocalFilters(resetFilters);
-    setFilters(resetFilters);
-    onApplyFilters(resetFilters);
-  };
-  
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setFilters(localFilters);
-    onApplyFilters(localFilters);
-  };
-  
-  return (
-    <Card className="mb-6">
-      <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <div>
-            <label htmlFor="sentiment" className="block text-sm font-medium text-gray-700">
-              Sentiment
-            </label>
-            <select
-              id="sentiment"
-              name="sentiment"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={localFilters.sentiment}
-              onChange={handleChange}
-            >
-              <option value="all">All</option>
-              <option value="positive">Positive</option>
-              <option value="neutral">Neutral</option>
-              <option value="negative">Negative</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="source" className="block text-sm font-medium text-gray-700">
-              Source
-            </label>
-            <select
-              id="source"
-              name="source"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={localFilters.source}
-              onChange={handleChange}
-            >
-              <option value="all">All</option>
-              <option value="twitter">Twitter</option>
-              <option value="instagram">Instagram</option>
-              <option value="linkedin">LinkedIn</option>
-              <option value="app_chat">App Chat</option>
-              <option value="survey">Survey</option>
-              <option value="direct">Direct</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="issueType" className="block text-sm font-medium text-gray-700">
-              Issue Type
-            </label>
-            <select
-              id="issueType"
-              name="issueType"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={localFilters.issueType}
-              onChange={handleChange}
-            >
-              <option value="all">All</option>
-              <option value="queue">Queue</option>
-              <option value="audio">Audio</option>
-              <option value="video">Video</option>
-              <option value="crowding">Crowding</option>
-              <option value="amenities">Amenities</option>
-              <option value="content">Content</option>
-              <option value="temperature">Temperature</option>
-              <option value="safety">Safety</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">
-              Start Date
-            </label>
-            <input
-              type="date"
-              id="startDate"
-              name="startDate"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={localFilters.startDate}
-              onChange={handleChange}
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
-              End Date
-            </label>
-            <input
-              type="date"
-              id="endDate"
-              name="endDate"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={localFilters.endDate}
-              onChange={handleChange}
-            />
-          </div>
-          
-          <div>
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700">
-              Search
-            </label>
-            <input
-              type="text"
-              id="search"
-              name="search"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              placeholder="Search feedback..."
-              value={localFilters.search}
-              onChange={handleChange}
-            />
-          </div>
-        </div>
-        
-        <div className="mt-4 flex justify-end space-x-3">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleReset}
-          >
-            Reset
-          </Button>
-          
-          <Button
-            type="submit"
-            variant="primary"
-            icon={<Filter size={16} className="mr-2" />}
-          >
-            Apply Filters
-          </Button>
-        </div>
-      </form>
-    </Card>
-  );
-};
-
-const FeedbackDetailModal = ({ isOpen, onClose, feedback }) => {
-  if (!feedback) return null;
-  
-  const getSentimentText = (sentiment, score) => {
-    let text = '';
-    let color = '';
-    
-    switch (sentiment) {
-      case 'positive':
-        text = 'Positive';
-        color = 'text-green-500';
-        break;
-      case 'neutral':
-        text = 'Neutral';
-        color = 'text-gray-500';
-        break;
-      case 'negative':
-        text = 'Negative';
-        color = 'text-red-500';
-        break;
-      default:
-        text = 'Unknown';
-        color = 'text-gray-500';
-    }
-    
-    return (
-      <span className={color}>
-        {text} ({score ? score.toFixed(2) : 'N/A'})
-      </span>
-    );
-  };
-  
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
-  
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Feedback Details"
-      size="lg"
-    >
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-medium text-gray-900">Feedback</h3>
-          <p className="mt-1 text-sm text-gray-600">{feedback.text}</p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <h4 className="text-sm font-medium text-gray-900">Metadata</h4>
-            <div className="mt-1 bg-gray-50 p-3 rounded-md">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-gray-500">Source:</div>
-                <div className="capitalize">{feedback.source}</div>
-                
-                <div className="text-gray-500">Sentiment:</div>
-                <div>{getSentimentText(feedback.sentiment, feedback.sentimentScore)}</div>
-                
-                <div className="text-gray-500">Date:</div>
-                <div>{formatDate(feedback.createdAt)}</div>
-                
-                <div className="text-gray-500">Processed:</div>
-                <div>{feedback.processed ? 'Yes' : 'No'}</div>
-                
-                {feedback.metadata?.username && (
-                  <>
-                    <div className="text-gray-500">Username:</div>
-                    <div>@{feedback.metadata.username}</div>
-                  </>
-                )}
-                
-                {feedback.metadata?.followerCount !== undefined && (
-                  <>
-                    <div className="text-gray-500">Followers:</div>
-                    <div>{feedback.metadata.followerCount.toLocaleString()}</div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="text-sm font-medium text-gray-900">Issue Details</h4>
-            <div className="mt-1 bg-gray-50 p-3 rounded-md">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-gray-500">Issue Type:</div>
-                <div>{feedback.issueType || 'None'}</div>
-                
-                {feedback.issueDetails?.severity && (
-                  <>
-                    <div className="text-gray-500">Severity:</div>
-                    <div className="capitalize">{feedback.issueDetails.severity}</div>
-                  </>
-                )}
-                
-                {feedback.issueDetails?.location && (
-                  <>
-                    <div className="text-gray-500">Location:</div>
-                    <div>{feedback.issueDetails.location}</div>
-                  </>
-                )}
-                
-                <div className="text-gray-500">Resolved:</div>
-                <div>{feedback.issueDetails?.resolved ? 'Yes' : 'No'}</div>
-                
-                {feedback.issueDetails?.resolvedAt && (
-                  <>
-                    <div className="text-gray-500">Resolved At:</div>
-                    <div>{formatDate(feedback.issueDetails.resolvedAt)}</div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {feedback.metadata?.keywords && feedback.metadata.keywords.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-gray-900">Keywords</h4>
-            <div className="mt-1 flex flex-wrap">
-              {feedback.metadata.keywords.map((keyword, index) => (
-                <span 
-                  key={index}
-                  className="mr-2 mb-2 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                >
-                  {keyword}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {feedback.sourceId && (
-          <div className="pt-4 flex justify-end">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<ExternalLink size={14} className="mr-1" />}
-              onClick={() => window.open(`#view-original-source-${feedback.source}-${feedback.sourceId}`)}
-            >
-              View Original
-            </Button>
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-};
-
-const ProcessFeedbackModal = ({ isOpen, onClose, feedback, onSubmit }) => {
-  const [formData, setFormData] = useState({
-    issueType: '',
-    severity: 'medium',
-    location: '',
-    resolved: false
-  });
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
-  useEffect(() => {
-    if (feedback) {
-      setFormData({
-        issueType: feedback.issueType || '',
-        severity: feedback.issueDetails?.severity || 'medium',
-        location: feedback.issueDetails?.location || '',
-        resolved: feedback.issueDetails?.resolved || false
-      });
-    }
-  }, [feedback]);
-  
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const updateData = {
-        processed: true,
-        issueType: formData.issueType || null,
-        issueDetails: {
-          severity: formData.severity,
-          location: formData.location || null,
-          resolved: formData.resolved
-        }
-      };
-      
-      await onSubmit(feedback._id, updateData);
-      onClose();
-    } catch (err) {
-      setError(err.message || 'Failed to process feedback');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Process Feedback"
-      size="md"
-    >
-      {feedback && (
-        <>
-          <div className="mb-4 p-3 bg-gray-50 rounded-md">
-            <p className="text-sm text-gray-700">{feedback.text}</p>
-            <div className="mt-1 text-xs text-gray-500">
-              <span className="capitalize">{feedback.source}</span> • 
-              <span className="ml-1">{new Date(feedback.createdAt).toLocaleDateString()}</span>
-            </div>
-          </div>
-          
-          <form onSubmit={handleSubmit}>
-            {error && (
-              <div className="mb-4 p-4 bg-red-50 text-sm text-red-700 rounded-md">
-                {error}
-              </div>
-            )}
-            
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="issueType" className="block text-sm font-medium text-gray-700">
-                  Issue Type
-                </label>
-                <select
-                  id="issueType"
-                  name="issueType"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  value={formData.issueType}
-                  onChange={handleChange}
-                >
-                  <option value="">None</option>
-                  <option value="queue">Queue</option>
-                  <option value="audio">Audio</option>
-                  <option value="video">Video</option>
-                  <option value="crowding">Crowding</option>
-                  <option value="amenities">Amenities</option>
-                  <option value="content">Content</option>
-                  <option value="temperature">Temperature</option>
-                  <option value="safety">Safety</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              
-              {formData.issueType && (
-                <>
-                  <div>
-                    <label htmlFor="severity" className="block text-sm font-medium text-gray-700">
-                      Severity
-                    </label>
-                    <select
-                      id="severity"
-                      name="severity"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      value={formData.severity}
-                      onChange={handleChange}
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="location" className="block text-sm font-medium text-gray-700">
-                      Location (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      id="location"
-                      name="location"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      placeholder="E.g. Main Hall, Room 3, etc."
-                      value={formData.location}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <input
-                      id="resolved"
-                      name="resolved"
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      checked={formData.resolved}
-                      onChange={handleChange}
-                    />
-                    <label htmlFor="resolved" className="ml-2 block text-sm text-gray-900">
-                      Mark as resolved
-                    </label>
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="mt-5 flex justify-end space-x-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={onClose}
-              >
-                Cancel
-              </Button>
-              
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={loading}
-              >
-                {loading ? <Loader size="sm" color="white" className="mr-2" /> : null}
-                Save
-              </Button>
-            </div>
-          </form>
-        </>
-      )}
-    </Modal>
-  );
-};
-
-const BatchProcessModal = ({ isOpen, onClose, selectedCount, onSubmit }) => {
-  const [formData, setFormData] = useState({
-    processed: true,
-    issueType: '',
-    severity: 'medium',
-    resolved: false
-  });
-  
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      await onSubmit(formData);
-      onClose();
-    } catch (err) {
-      setError(err.message || 'Failed to process feedback');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`Batch Process (${selectedCount} items)`}
-      size="md"
-    >
-      <form onSubmit={handleSubmit}>
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 text-sm text-red-700 rounded-md">
-            {error}
-          </div>
-        )}
-        
-        <div className="space-y-4">
-          <div>
-            <label htmlFor="issueType" className="block text-sm font-medium text-gray-700">
-              Issue Type
-            </label>
-            <select
-              id="issueType"
-              name="issueType"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={formData.issueType}
-              onChange={handleChange}
-            >
-              <option value="">No Change</option>
-              <option value="none">None</option>
-              <option value="queue">Queue</option>
-              <option value="audio">Audio</option>
-              <option value="video">Video</option>
-              <option value="crowding">Crowding</option>
-              <option value="amenities">Amenities</option>
-              <option value="content">Content</option>
-              <option value="temperature">Temperature</option>
-              <option value="safety">Safety</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          
-          <div>
-            <label htmlFor="severity" className="block text-sm font-medium text-gray-700">
-              Severity
-            </label>
-            <select
-              id="severity"
-              name="severity"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              value={formData.severity}
-              onChange={handleChange}
-            >
-              <option value="">No Change</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-          
-          <div className="flex items-center">
-            <input
-              id="resolved"
-              name="resolved"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              checked={formData.resolved}
-              onChange={handleChange}
-            />
-            <label htmlFor="resolved" className="ml-2 block text-sm text-gray-900">
-              Mark as resolved
-            </label>
-          </div>
-          
-          <div className="flex items-center">
-            <input
-              id="processed"
-              name="processed"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              checked={formData.processed}
-              onChange={handleChange}
-            />
-            <label htmlFor="processed" className="ml-2 block text-sm text-gray-900">
-              Mark as processed
-            </label>
-          </div>
-        </div>
-        
-        <div className="mt-5 flex justify-end space-x-3">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onClose}
-          >
-            Cancel
-          </Button>
-          
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={loading}
-          >
-            {loading ? <Loader size="sm" color="white" className="mr-2" /> : null}
-            Apply to {selectedCount} items
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  );
-};
-const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, isMultiple, count = 1, isDeleting }) => {
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={isMultiple ? `Delete ${count} Items` : 'Delete Feedback'}
-      footer={
-        <>
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={isDeleting}
-          >
-            Cancel
-          </Button>
-          
-          <Button
-            variant="danger"
-            onClick={onConfirm}
-            disabled={isDeleting}
-          >
-            {isDeleting ? <Loader size="sm" color="white" className="mr-2" /> : null}
-            Delete
-          </Button>
-        </>
-      }
-    >
-      <p className="text-gray-700">
-        Are you sure you want to delete {isMultiple ? `these ${count} feedback items` : 'this feedback item'}?
-      </p>
-      <p className="mt-2 text-sm text-gray-500">
-        This action cannot be undone. {isMultiple ? 'These items' : 'This item'} will be permanently deleted from the database.
-      </p>
-    </Modal>
-  );
-};
 
 const Feedback = () => {
   const { selectedEvent } = useContext(EventContext);
@@ -869,40 +30,44 @@ const Feedback = () => {
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 0
+  const [viewFeedback, setViewFeedback] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFeedbackFormOpen, setIsFeedbackFormOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedFeedback, setSelectedFeedback] = useState([]);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [batchAction, setBatchAction] = useState({
+    processed: true,
+    issueType: '',
+    resolved: false,
+    severity: 'medium'
   });
   
+  // Filter states
   const [filters, setFilters] = useState({
-    sentiment: 'all',
-    source: 'all',
-    issueType: 'all',
+    sentiment: '',
+    source: '',
+    issueType: '',
     startDate: '',
     endDate: '',
     search: ''
   });
   
-  const [selectedFeedback, setSelectedFeedback] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showProcessModal, setShowProcessModal] = useState(false);
-  const [showBatchModal, setShowBatchModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteMultiple, setDeleteMultiple] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [feedbackToDelete, setFeedbackToDelete] = useState(null);
-  const [selectedIds, setSelectedIds] = useState([]);
+  // Pagination
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 1
+  });
   
-  // Fetch feedback when event or filters change
   useEffect(() => {
     if (selectedEvent) {
       fetchFeedback();
     }
-  }, [selectedEvent, pagination.page]);
+  }, [selectedEvent, pagination.page, filters]);
   
-  // Handle new feedback from socket
+  // Listen for new feedback from socket
   useEffect(() => {
     if (newFeedback && selectedEvent && newFeedback.event === selectedEvent.id) {
       setFeedback(prev => [newFeedback, ...prev]);
@@ -916,177 +81,145 @@ const Feedback = () => {
       setLoading(true);
       setError(null);
       
-      const queryParams = {
+      const response = await feedbackService.getEventFeedback(selectedEvent.id, {
         page: pagination.page,
-        limit: pagination.limit
-      };
-      
-      // Add filters to query params
-      if (filters.sentiment !== 'all') queryParams.sentiment = filters.sentiment;
-      if (filters.source !== 'all') queryParams.source = filters.source;
-      if (filters.issueType !== 'all') queryParams.issueType = filters.issueType;
-      if (filters.startDate) queryParams.startDate = filters.startDate;
-      if (filters.endDate) queryParams.endDate = filters.endDate;
-      if (filters.search) queryParams.search = filters.search;
-      
-      const response = await feedbackService.getEventFeedback(selectedEvent.id, queryParams);
+        limit: pagination.limit,
+        ...filters
+      });
       
       setFeedback(response.data);
       setPagination({
-        page: response.pagination.page,
-        limit: response.pagination.limit,
+        ...pagination,
         total: response.total,
         totalPages: response.pagination.totalPages
       });
     } catch (err) {
       console.error('Error fetching feedback:', err);
-      setError('Failed to load feedback. Please try again.');
+      setError('Failed to load feedback data');
     } finally {
       setLoading(false);
     }
   };
   
-  const handleApplyFilters = () => {
+  const handleViewFeedback = (feedback) => {
+    setViewFeedback(feedback);
+    setIsModalOpen(true);
+  };
+  
+  const handleDeleteFeedback = async (id) => {
+    try {
+      await feedbackService.deleteFeedback(id);
+      setFeedback(feedback.filter(item => item._id !== id));
+      setIsDeleteModalOpen(false);
+    } catch (err) {
+      console.error('Error deleting feedback:', err);
+      setError('Failed to delete feedback');
+    }
+  };
+  
+  const handleBatchProcess = async () => {
+    try {
+      await feedbackService.batchProcessFeedback(selectedFeedback, batchAction);
+      fetchFeedback();
+      setSelectedFeedback([]);
+      setIsBatchModalOpen(false);
+    } catch (err) {
+      console.error('Error batch processing feedback:', err);
+      setError('Failed to process feedback');
+    }
+  };
+  
+  const handleFilterChange = (e) => {
+    const { name, value } = e.target;
+    setFilters({
+      ...filters,
+      [name]: value
+    });
+    
     // Reset to page 1 when filters change
-    setPagination(prev => ({ ...prev, page: 1 }));
-    fetchFeedback();
+    setPagination({
+      ...pagination,
+      page: 1
+    });
+  };
+  
+  const clearFilters = () => {
+    setFilters({
+      sentiment: '',
+      source: '',
+      issueType: '',
+      startDate: '',
+      endDate: '',
+      search: ''
+    });
   };
   
   const handlePageChange = (newPage) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
-  };
-  
-  const handleViewDetail = (feedback) => {
-    setSelectedFeedback(feedback);
-    setShowDetailModal(true);
-  };
-  
-  const handleProcessFeedback = (feedback) => {
-    setSelectedFeedback(feedback);
-    setShowProcessModal(true);
-  };
-  
-  const handleUpdateFeedback = async (feedbackId, updateData) => {
-    try {
-      const updatedFeedback = await feedbackService.updateFeedback(feedbackId, updateData);
-      
-      // Update feedback in state
-      setFeedback(prev => prev.map(item => (
-        item._id === feedbackId ? updatedFeedback : item
-      )));
-      
-      return updatedFeedback;
-    } catch (err) {
-      console.error('Error updating feedback:', err);
-      throw err;
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setPagination({
+        ...pagination,
+        page: newPage
+      });
     }
   };
   
-  const handleDelete = (feedbackId) => {
-    setFeedbackToDelete(feedbackId);
-    setDeleteMultiple(false);
-    setShowDeleteModal(true);
-  };
-  
-  const handleDeleteConfirm = async () => {
+  const exportFeedback = async () => {
     try {
-      setIsDeleting(true);
+      const data = await feedbackService.getEventFeedback(selectedEvent.id, {
+        limit: 1000,
+        ...filters
+      });
       
-      if (deleteMultiple) {
-        // Delete multiple feedback items
-        await feedbackService.batchProcessFeedback(selectedIds, { deleted: true });
-        
-        // Update feedback in state
-        setFeedback(prev => prev.filter(item => !selectedIds.includes(item._id)));
-        setSelectedIds([]);
-      } else {
-        // Delete single feedback item
-        await feedbackService.deleteFeedback(feedbackToDelete);
-        
-        // Update feedback in state
-        setFeedback(prev => prev.filter(item => item._id !== feedbackToDelete));
-      }
+      // Create CSV content
+      let csv = 'ID,Sentiment,Score,Source,Text,Issue Type,Location,Created At\n';
       
-      setShowDeleteModal(false);
+      data.data.forEach(item => {
+        csv += `${item._id},`;
+        csv += `${item.sentiment},`;
+        csv += `${item.sentimentScore},`;
+        csv += `${item.source},`;
+        csv += `"${item.text.replace(/"/g, '""')}",`; // Escape quotes in text
+        csv += `${item.issueType || ''},`;
+        csv += `${item.issueDetails?.location || ''},`;
+        csv += `${new Date(item.createdAt).toISOString()}\n`;
+      });
+      
+      // Download CSV
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `feedback_export_${new Date().toISOString()}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (err) {
-      console.error('Error deleting feedback:', err);
-      setError('Failed to delete feedback. Please try again.');
-    } finally {
-      setIsDeleting(false);
+      console.error('Error exporting feedback:', err);
+      setError('Failed to export feedback');
     }
   };
-  
-  const handleBatchProcess = async (updateData) => {
-    try {
-      await feedbackService.batchProcessFeedback(selectedIds, updateData);
-      
-      // Refresh feedback data
-      fetchFeedback();
-      
-      // Clear selection
-      setSelectedIds([]);
-    } catch (err) {
-      console.error('Error batch processing feedback:', err);
-      throw err;
-    }
-  };
-  
-  const handleRefresh = () => {
-    fetchFeedback();
-  };
-  
-  const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) return;
-    
-    setDeleteMultiple(true);
-    setShowDeleteModal(true);
-  };
-  
-  const handleBatchSelected = () => {
-    if (selectedIds.length === 0) return;
-    
-    setShowBatchModal(true);
-  };
-  
-  if (!selectedEvent) {
-    return (
-      <div className="flex h-64 flex-col items-center justify-center p-6">
-        <MessageCircle size={48} className="mb-4 text-gray-400" />
-        <h3 className="text-lg font-medium text-gray-900">No event selected</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          Please select an event to view feedback.
-        </p>
-        <Button
-          variant="primary"
-          className="mt-4"
-          onClick={() => window.location.href = '/events'}
-        >
-          Go to Events
-        </Button>
-      </div>
-    );
-  }
   
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Feedback</h1>
         
-        <div className="flex space-x-3">
+        <div className="flex space-x-2">
           <Button
             variant="secondary"
-            onClick={handleRefresh}
-            icon={<RefreshCw size={16} className="mr-2" />}
-            disabled={loading}
+            onClick={() => setIsFeedbackFormOpen(true)}
+            icon={<MessageCircle size={16} />}
           >
-            Refresh
+            Add Feedback
           </Button>
           
           <Button
             variant="primary"
-            icon={<MessageCircle size={16} className="mr-2" />}
+            onClick={fetchFeedback}
+            icon={<RefreshCw size={16} />}
           >
-            Submit Feedback
+            Refresh
           </Button>
         </div>
       </div>
@@ -1097,125 +230,490 @@ const Feedback = () => {
         </div>
       )}
       
-      <FeedbackFilter
-        filters={filters}
-        setFilters={setFilters}
-        onApplyFilters={handleApplyFilters}
-      />
-      
-      <Card className="mb-4">
-        <div className="flex justify-between items-center mb-4">
-          <div>
-            <h2 className="text-lg font-medium">Feedback List</h2>
-            <p className="text-sm text-gray-500">
-              {pagination.total} total items • Page {pagination.page} of {pagination.totalPages}
-            </p>
-          </div>
-          
-          {selectedIds.length > 0 && (
-            <div className="flex space-x-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleBatchSelected}
-              >
-                Process Selected ({selectedIds.length})
-              </Button>
+      {!selectedEvent ? (
+        <div className="flex h-64 flex-col items-center justify-center p-6">
+          <MessageCircle size={48} className="mb-4 text-gray-400" />
+          <h3 className="text-lg font-medium text-gray-900">No event selected</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Please select an event to view feedback.
+          </p>
+          <Button
+            variant="primary"
+            className="mt-4"
+            onClick={() => window.location.href = '/events'}
+          >
+            Go to Events
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Filters */}
+          <Card className="mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-medium mb-4 sm:mb-0">Filters</h2>
               
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={handleDeleteSelected}
-              >
-                Delete Selected ({selectedIds.length})
-              </Button>
+              <div className="flex space-x-2">
+                {Object.values(filters).some(val => val !== '') && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={clearFilters}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+                
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={exportFeedback}
+                  icon={<Download size={14} />}
+                >
+                  Export
+                </Button>
+              </div>
+            </div>
+            
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label htmlFor="sentiment" className="block text-sm font-medium text-gray-700 mb-1">
+                  Sentiment
+                </label>
+                <select
+                  id="sentiment"
+                  name="sentiment"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  value={filters.sentiment}
+                  onChange={handleFilterChange}
+                >
+                  <option value="">All Sentiments</option>
+                  <option value="positive">Positive</option>
+                  <option value="neutral">Neutral</option>
+                  <option value="negative">Negative</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="source" className="block text-sm font-medium text-gray-700 mb-1">
+                  Source
+                </label>
+                <select
+                  id="source"
+                  name="source"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  value={filters.source}
+                  onChange={handleFilterChange}
+                >
+                  <option value="">All Sources</option>
+                  <option value="twitter">Twitter</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="direct">Direct</option>
+                  <option value="survey">Survey</option>
+                  <option value="app_chat">App Chat</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="issueType" className="block text-sm font-medium text-gray-700 mb-1">
+                  Issue Type
+                </label>
+                <select
+                  id="issueType"
+                  name="issueType"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  value={filters.issueType}
+                  onChange={handleFilterChange}
+                >
+                  <option value="">All Issues</option>
+                  <option value="queue">Queue/Waiting</option>
+                  <option value="audio">Audio</option>
+                  <option value="video">Video/Display</option>
+                  <option value="crowding">Crowding</option>
+                  <option value="amenities">Amenities</option>
+                  <option value="content">Content</option>
+                  <option value="temperature">Temperature</option>
+                  <option value="safety">Safety</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+                  Search
+                </label>
+                <input
+                  type="text"
+                  id="search"
+                  name="search"
+                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  placeholder="Search feedback..."
+                  value={filters.search}
+                  onChange={handleFilterChange}
+                />
+              </div>
+            </div>
+            
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Date
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Calendar className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                  </div>
+                  <input
+                    type="date"
+                    id="startDate"
+                    name="startDate"
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                    value={filters.startDate}
+                    onChange={handleFilterChange}
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+                  End Date
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Calendar className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                  </div>
+                  <input
+                    type="date"
+                    id="endDate"
+                    name="endDate"
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                    value={filters.endDate}
+                    onChange={handleFilterChange}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+          
+          {/* Batch Action Bar */}
+          {selectedFeedback.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6 flex items-center justify-between">
+              <div className="flex items-center">
+                <CheckSquare className="h-5 w-5 text-blue-500 mr-2" />
+                <span className="text-sm font-medium text-blue-700">
+                  {selectedFeedback.length} items selected
+                </span>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedFeedback([])}
+                >
+                  Clear Selection
+                </Button>
+                
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsBatchModalOpen(true)}
+                >
+                  Batch Process
+                </Button>
+              </div>
             </div>
           )}
-        </div>
-        
-        {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <Loader size="lg" />
-          </div>
-        ) : feedback.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center">
-            <MessageCircle size={48} className="mb-4 text-gray-400" />
-            <h3 className="text-lg font-medium text-gray-900">No feedback found</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Try adjusting your filters or submit new feedback.
-            </p>
-          </div>
-        ) : (
-          <>
-            <FeedbackTable
-              feedback={feedback}
-              onViewDetail={handleViewDetail}
-              onProcessFeedback={handleProcessFeedback}
-              onDelete={handleDelete}
-              onSelectMultiple={setSelectedIds}
-              selectedIds={selectedIds}
-            />
+          
+          {/* Feedback Table */}
+          <Card className="mb-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-64">
+                <Loader size="lg" />
+              </div>
+            ) : feedback.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <MessageCircle size={48} className="text-gray-300 mb-4" />
+                <p className="text-gray-500 text-lg">No feedback found</p>
+                <p className="text-gray-400 text-sm mt-2">
+                  Try adjusting your filters or adding new feedback
+                </p>
+              </div>
+            ) : (
+              <>
+                <FeedbackTable
+                  feedback={feedback}
+                  onViewDetails={handleViewFeedback}
+                  onDelete={(id) => {
+                    setViewFeedback(feedback.find(item => item._id === id));
+                    setIsDeleteModalOpen(true);
+                  }}
+                  selectedFeedback={selectedFeedback}
+                  setSelectedFeedback={setSelectedFeedback}
+                />
+                
+                {/* Pagination */}
+                <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6 mt-4">
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700">
+                        Showing <span className="font-medium">{feedback.length}</span> of{' '}
+                        <span className="font-medium">{pagination.total}</span> results
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                        <button
+                          onClick={() => handlePageChange(pagination.page - 1)}
+                          disabled={pagination.page === 1}
+                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="sr-only">Previous</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        
+                        {[...Array(pagination.totalPages).keys()].map((page) => (
+                          <button
+                            key={page + 1}
+                            onClick={() => handlePageChange(page + 1)}
+                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                              pagination.page === page + 1
+                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                            }`}
+                          >
+                            {page + 1}
+                          </button>
+                        ))}
+                        
+                        <button
+                          onClick={() => handlePageChange(pagination.page + 1)}
+                          disabled={pagination.page === pagination.totalPages}
+                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="sr-only">Next</span>
+                          <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+        </>
+      )}
+      
+      {/* Feedback Detail Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Feedback Details"
+      >
+        {viewFeedback && (
+          <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+              {viewFeedback.sentiment === 'positive' ? (
+                <Smile className="text-green-500" size={20} />
+              ) : viewFeedback.sentiment === 'negative' ? (
+                <Frown className="text-red-500" size={20} />
+              ) : (
+                <Meh className="text-gray-500" size={20} />
+              )}
+              <span className="font-medium capitalize">{viewFeedback.sentiment}</span>
+              <span className="text-sm text-gray-500">
+                (Score: {viewFeedback.sentimentScore.toFixed(2)})
+              </span>
+            </div>
             
-            {pagination.totalPages > 1 && (
-              <div className="mt-4 flex justify-center">
-                <nav className="flex items-center">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handlePageChange(Math.max(pagination.page - 1, 1))}
-                    disabled={pagination.page === 1}
-                  >
-                    Previous
-                  </Button>
-                  
-                  <span className="mx-4 text-sm text-gray-700">
-                    Page {pagination.page} of {pagination.totalPages}
-                  </span>
-                  
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handlePageChange(Math.min(pagination.page + 1, pagination.totalPages))}
-                    disabled={pagination.page === pagination.totalPages}
-                  >
-                    Next
-                  </Button>
-                </nav>
+            <div>
+              <h3 className="text-sm font-medium text-gray-700">Feedback</h3>
+              <p className="mt-1 text-gray-900">{viewFeedback.text}</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Source</h3>
+                <p className="mt-1 capitalize">{viewFeedback.source}</p>
+                {viewFeedback.metadata?.username && (
+                  <p className="text-sm text-gray-500">
+                    By: {viewFeedback.metadata.username}
+                  </p>
+                )}
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Date & Time</h3>
+                <p className="mt-1">
+                  {new Date(viewFeedback.createdAt).toLocaleString()}
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Issue Type</h3>
+                <p className="mt-1 capitalize">
+                  {viewFeedback.issueType || 'Not classified'}
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Location</h3>
+                <p className="mt-1">
+                  {viewFeedback.issueDetails?.location || 'Not specified'}
+                </p>
+              </div>
+            </div>
+            
+            {viewFeedback.metadata?.keywords?.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-700">Keywords</h3>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {viewFeedback.metadata.keywords.map((keyword, index) => (
+                    <span 
+                      key={index}
+                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
-          </>
+          </div>
         )}
-      </Card>
+      </Modal>
       
-      {/* Modals */}
-      <FeedbackDetailModal
-        isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
-        feedback={selectedFeedback}
-      />
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Delete Feedback"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setIsDeleteModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            
+            <Button
+              variant="danger"
+              onClick={() => handleDeleteFeedback(viewFeedback?._id)}
+              icon={<Trash2 size={16} />}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-700">
+          Are you sure you want to delete this feedback?
+        </p>
+        <p className="mt-2 text-sm text-gray-500">
+          This action cannot be undone.
+        </p>
+      </Modal>
       
-      <ProcessFeedbackModal
-        isOpen={showProcessModal}
-        onClose={() => setShowProcessModal(false)}
-        feedback={selectedFeedback}
-        onSubmit={handleUpdateFeedback}
-      />
+      {/* Batch Process Modal */}
+      <Modal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
+        title="Batch Process Feedback"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setIsBatchModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            
+            <Button
+              variant="primary"
+              onClick={handleBatchProcess}
+              icon={<CheckSquare size={16} />}
+            >
+              Process {selectedFeedback.length} Items
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-gray-700">
+            Apply the following updates to {selectedFeedback.length} selected feedback items:
+          </p>
+          
+          <div>
+            <label htmlFor="batch-issueType" className="block text-sm font-medium text-gray-700">
+              Issue Type
+            </label>
+            <select
+              id="batch-issueType"
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+              value={batchAction.issueType}
+              onChange={(e) => setBatchAction({...batchAction, issueType: e.target.value})}
+            >
+              <option value="">No Change</option>
+              <option value="queue">Queue/Waiting</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video/Display</option>
+              <option value="crowding">Crowding</option>
+              <option value="amenities">Amenities</option>
+              <option value="content">Content</option>
+              <option value="temperature">Temperature</option>
+              <option value="safety">Safety</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center">
+            <input
+              id="batch-processed"
+              name="processed"
+              type="checkbox"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              checked={batchAction.processed}
+              onChange={(e) => setBatchAction({...batchAction, processed: e.target.checked})}
+            />
+            <label htmlFor="batch-processed" className="ml-2 block text-sm text-gray-900">
+              Mark as processed
+            </label>
+          </div>
+          
+          <div className="flex items-center">
+            <input
+              id="batch-resolved"
+              name="resolved"
+              type="checkbox"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              checked={batchAction.resolved}
+              onChange={(e) => setBatchAction({...batchAction, resolved: e.target.checked})}
+            />
+            <label htmlFor="batch-resolved" className="ml-2 block text-sm text-gray-900">
+              Mark issues as resolved
+            </label>
+          </div>
+        </div>
+      </Modal>
       
-      <BatchProcessModal
-        isOpen={showBatchModal}
-        onClose={() => setShowBatchModal(false)}
-        selectedCount={selectedIds.length}
-        onSubmit={handleBatchProcess}
-      />
-      
-      <DeleteConfirmationModal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        onConfirm={handleDeleteConfirm}
-        isMultiple={deleteMultiple}
-        count={selectedIds.length}
-        isDeleting={isDeleting}
-      />
+      {/* Add Feedback Modal */}
+      <Modal
+        isOpen={isFeedbackFormOpen}
+        onClose={() => setIsFeedbackFormOpen(false)}
+        title="Add Feedback"
+      >
+        <FeedbackForm
+          onSuccess={() => {
+            setIsFeedbackFormOpen(false);
+            fetchFeedback();
+          }}
+        />
+      </Modal>
     </div>
   );
 };
