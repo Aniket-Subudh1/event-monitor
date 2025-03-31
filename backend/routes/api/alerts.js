@@ -8,6 +8,9 @@ router.use(protect);
 
 router.use(apiLimiter);
 
+// IMPORTANT: Move the route for alert types BEFORE the :alertId route to avoid conflict
+router.get('/alert-types', alertController.getAlertTypes);
+
 router.get('/event/:eventId',
   checkEventOwnership({ idField: 'eventId' }),
   alertController.getEventAlerts
@@ -18,6 +21,15 @@ router.get('/event/:eventId/count',
   alertController.getActiveAlertCount
 );
 
+router.get('/severity/:severity',
+  alertController.getAlertsBySeverity
+);
+
+router.post('/resolve-multiple',
+  alertController.resolveMultipleAlerts
+);
+
+// Now the specific alert ID routes come after the named routes
 router.get('/:alertId',
   alertController.getAlertById
 );
@@ -44,18 +56,6 @@ router.put('/:alertId',
 
 router.delete('/:alertId',
   alertController.deleteAlert
-);
-
-router.get('/types',
-  alertController.getAlertTypes
-);
-
-router.get('/severity/:severity',
-  alertController.getAlertsBySeverity
-);
-
-router.post('/resolve-multiple',
-  alertController.resolveMultipleAlerts
 );
 
 module.exports = router;

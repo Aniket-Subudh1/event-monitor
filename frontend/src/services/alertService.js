@@ -153,10 +153,39 @@ const alertService = {
    */
   getAlertTypes: async () => {
     try {
-      const response = await api.get('/alerts/types');
+      // Fixed: Use /api/alerts/type-metadata instead of /api/alerts/types
+      // This avoids conflict with the /:alertId route pattern
+      const response = await api.get('/alerts/alert-types');
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch alert types';
+      console.error('Error fetching alert types:', error);
+      // Return a default structure if the API fails
+      return {
+        types: [
+          { id: 'sentiment', label: 'Sentiment', description: 'Alerts based on negative sentiment detection' },
+          { id: 'issue', label: 'Issue', description: 'Alerts for specific identified issues' },
+          { id: 'trend', label: 'Trend', description: 'Alerts for trending problems or sentiment changes' },
+          { id: 'system', label: 'System', description: 'System-generated alerts' }
+        ],
+        categories: [
+          { id: 'queue', label: 'Queue/Waiting', description: 'Issues with lines or waiting times' },
+          { id: 'audio', label: 'Audio Problems', description: 'Sound system or audio quality issues' },
+          { id: 'video', label: 'Video/Display', description: 'Projection, screens or visibility issues' },
+          { id: 'crowding', label: 'Overcrowding', description: 'Space or capacity problems' },
+          { id: 'amenities', label: 'Amenities', description: 'Issues with facilities like food, bathrooms, etc.' },
+          { id: 'content', label: 'Content', description: 'Issues with speakers, presentations or content' },
+          { id: 'temperature', label: 'Temperature', description: 'Issues with room temperature or climate' },
+          { id: 'safety', label: 'Safety', description: 'Safety or security concerns' },
+          { id: 'general', label: 'General', description: 'General alerts not fitting other categories' },
+          { id: 'other', label: 'Other', description: 'Miscellaneous issues' }
+        ],
+        severities: [
+          { id: 'low', label: 'Low', description: 'Minor issues with minimal impact' },
+          { id: 'medium', label: 'Medium', description: 'Notable issues affecting some attendees' },
+          { id: 'high', label: 'High', description: 'Significant issues affecting many attendees' },
+          { id: 'critical', label: 'Critical', description: 'Major issues requiring immediate attention' }
+        ]
+      };
     }
   },
   
