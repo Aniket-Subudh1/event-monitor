@@ -25,16 +25,47 @@ const Dashboard = () => {
   const [timeframe, setTimeframe] = useState('day'); // 'hour', 'day', 'week'
   
   useEffect(() => {
-    if (!selectedEvent) return;
+    // Debug: Log the selectedEvent to see its structure
+    console.log("Selected Event:", selectedEvent);
+    
+    if (!selectedEvent) {
+      setLoading(false);
+      return;
+    }
     
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const data = await analyticsService.getDashboardData(selectedEvent.id);
+        
+        // Check what property contains the ID in the selectedEvent object
+        let eventId = null;
+        
+        if (typeof selectedEvent === 'object') {
+          // Debug all possible ID fields
+          console.log("Possible ID fields:", {
+            id: selectedEvent.id,
+            _id: selectedEvent._id,
+            eventId: selectedEvent.eventId,
+            event_id: selectedEvent.event_id
+          });
+          
+          // Try different possible ID field names
+          eventId = selectedEvent.id || selectedEvent._id || selectedEvent.eventId || selectedEvent.event_id;
+        }
+        
+        // Check if we found a valid ID
+        if (!eventId) {
+          console.error("Event object structure:", selectedEvent);
+          throw new Error('Invalid or missing event ID');
+        }
+        
+        console.log("Using event ID:", eventId);
+        
+        const data = await analyticsService.getDashboardData(eventId);
         setDashboardData(data);
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data');
+        setError(err.message || 'Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
@@ -43,44 +74,48 @@ const Dashboard = () => {
     fetchDashboardData();
     
     // Set up socket listeners for real-time updates
-    if (socket) {
-      socket.emit('join-event', { eventId: selectedEvent.id });
+    if (socket && selectedEvent) {
+      const eventId = selectedEvent.id || selectedEvent._id || selectedEvent.eventId || selectedEvent.event_id;
       
-      socket.on('new-feedback', (feedback) => {
-        // Update feedback stream in real-time
-        setDashboardData(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            feedback: {
-              ...prev.feedback,
-              latest: [feedback, ...prev.feedback.latest.slice(0, 4)],
-              recent: prev.feedback.recent + 1
-            }
-          };
+      if (eventId) {
+        socket.emit('join-event', { eventId });
+        
+        socket.on('new-feedback', (feedback) => {
+          // Update feedback stream in real-time
+          setDashboardData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              feedback: {
+                ...prev.feedback,
+                latest: [feedback, ...prev.feedback.latest.slice(0, 4)],
+                recent: prev.feedback.recent + 1
+              }
+            };
+          });
         });
-      });
-      
-      socket.on('new-alert', (alert) => {
-        // Update alerts in real-time
-        setDashboardData(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            alerts: {
-              ...prev.alerts,
-              latest: [alert, ...prev.alerts.latest.slice(0, 4)],
-              active: prev.alerts.active + 1
-            }
-          };
+        
+        socket.on('new-alert', (alert) => {
+          // Update alerts in real-time
+          setDashboardData(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              alerts: {
+                ...prev.alerts,
+                latest: [alert, ...prev.alerts.latest.slice(0, 4)],
+                active: prev.alerts.active + 1
+              }
+            };
+          });
         });
-      });
-      
-      return () => {
-        socket.emit('leave-event', { eventId: selectedEvent.id });
-        socket.off('new-feedback');
-        socket.off('new-alert');
-      };
+        
+        return () => {
+          socket.emit('leave-event', { eventId });
+          socket.off('new-feedback');
+          socket.off('new-alert');
+        };
+      }
     }
   }, [selectedEvent, socket]);
   
@@ -106,8 +141,11 @@ const Dashboard = () => {
     return (
       <div className="text-center p-6 bg-red-50 text-red-600 rounded-lg mt-4">
         <p className="text-lg font-semibold">{error}</p>
+        <p className="mt-2 text-sm">
+          Event data: {selectedEvent ? JSON.stringify(selectedEvent).substring(0, 100) + '...' : 'No event selected'}
+        </p>
         <button 
-          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           onClick={() => window.location.reload()}
         >
           Retry
@@ -120,6 +158,9 @@ const Dashboard = () => {
     return <div>No data available for this event.</div>;
   }
   
+  // Extract the event id for use in the component
+  const eventId = selectedEvent.id || selectedEvent._id || selectedEvent.eventId || selectedEvent.event_id;
+  
   return (
     <div className="p-6">
       {/* Event Header */}
@@ -129,7 +170,8 @@ const Dashboard = () => {
             <h1 className="text-2xl font-bold mb-2">{selectedEvent.name}</h1>
             <div className="flex items-center text-gray-500">
               <Calendar size={16} className="mr-2" />
-              {new Date(selectedEvent.startDate).toLocaleDateString()} - {new Date(selectedEvent.endDate).toLocaleDateString()}
+              {selectedEvent.startDate && new Date(selectedEvent.startDate).toLocaleDateString()} - 
+              {selectedEvent.endDate && new Date(selectedEvent.endDate).toLocaleDateString()}
             </div>
           </div>
           <div className="flex space-x-2">
@@ -149,7 +191,7 @@ const Dashboard = () => {
           <div className="flex justify-between">
             <div>
               <p className="text-gray-500 mb-1">Active Alerts</p>
-              <h3 className="text-2xl font-bold">{dashboardData.alerts.active}</h3>
+              <h3 className="text-2xl font-bold">{dashboardData.alerts?.active || 0}</h3>
             </div>
             <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
               <Bell size={24} className="text-red-600" />
@@ -161,7 +203,7 @@ const Dashboard = () => {
           <div className="flex justify-between">
             <div>
               <p className="text-gray-500 mb-1">Recent Feedback</p>
-              <h3 className="text-2xl font-bold">{dashboardData.feedback.recent}</h3>
+              <h3 className="text-2xl font-bold">{dashboardData.feedback?.recent || 0}</h3>
             </div>
             <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
               <MessageCircle size={24} className="text-blue-600" />
@@ -173,7 +215,7 @@ const Dashboard = () => {
           <div className="flex justify-between">
             <div>
               <p className="text-gray-500 mb-1">Connected Users</p>
-              <h3 className="text-2xl font-bold">{dashboardData.event.connectedUsers || 0}</h3>
+              <h3 className="text-2xl font-bold">{dashboardData.event?.connectedUsers || 0}</h3>
             </div>
             <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
               <Users size={24} className="text-green-600" />
@@ -185,7 +227,7 @@ const Dashboard = () => {
           <div className="flex justify-between">
             <div>
               <p className="text-gray-500 mb-1">Time Remaining</p>
-              <h3 className="text-2xl font-bold">{dashboardData.event.daysRemaining || '0'} days</h3>
+              <h3 className="text-2xl font-bold">{dashboardData.event?.daysRemaining || '0'} days</h3>
             </div>
             <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
               <Clock size={24} className="text-purple-600" />
@@ -200,7 +242,7 @@ const Dashboard = () => {
         <div className="lg:col-span-2 space-y-6">
           {/* Sentiment Overview */}
           <SentimentOverview 
-            sentimentData={dashboardData.feedback.sentiment} 
+            sentimentData={dashboardData.feedback?.sentiment} 
             className="bg-white rounded-lg shadow p-6"
           />
           
@@ -229,7 +271,7 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-            <SentimentChart timeframe={timeframe} eventId={selectedEvent.id} height={300} />
+            <SentimentChart timeframe={timeframe} eventId={eventId} height={300} />
           </div>
           
           {/* Trending Topics */}
@@ -243,13 +285,13 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* Active Alerts */}
           <ActiveAlerts 
-            alerts={dashboardData.alerts.latest} 
+            alerts={dashboardData.alerts?.latest || []} 
             className="bg-white rounded-lg shadow p-6"
           />
           
           {/* Live Feedback */}
           <FeedbackStream 
-            feedback={dashboardData.feedback.latest} 
+            feedback={dashboardData.feedback?.latest || []} 
             className="bg-white rounded-lg shadow p-6"
           />
         </div>

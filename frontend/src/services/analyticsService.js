@@ -15,7 +15,8 @@ const analyticsService = {
       });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch sentiment trend';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sentiment trend');
     }
   },
   
@@ -30,7 +31,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/sentiment/overview/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch sentiment overview';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch sentiment overview');
     }
   },
   
@@ -48,7 +50,8 @@ const analyticsService = {
       });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch issue trend';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch issue trend');
     }
   },
   
@@ -63,7 +66,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/sources/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch source distribution';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch source distribution');
     }
   },
   
@@ -78,7 +82,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/trending/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch trending topics';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch trending topics');
     }
   },
   
@@ -92,7 +97,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/location/${eventId}`);
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch location heatmap';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch location heatmap');
     }
   },
   
@@ -107,7 +113,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/alerts/history/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch alert history';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch alert history');
     }
   },
   
@@ -121,7 +128,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/summary/${eventId}`);
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch event summary';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch event summary');
     }
   },
   
@@ -131,11 +139,24 @@ const analyticsService = {
    * @returns {Promise} Promise object with dashboard data
    */
   getDashboardData: async (eventId) => {
+    if (!eventId) {
+      throw new Error('Event ID is required');
+    }
+    
     try {
       const response = await api.get(`/analytics/dashboard/${eventId}`);
+      // Add validation to ensure data exists
+      if (!response.data || !response.data.data) {
+        throw new Error('Invalid response format from API');
+      }
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch dashboard data';
+      // Enhanced error logging
+      console.error('Dashboard data fetch error:', error);
+      if (error.response) {
+        console.error('API response:', error.response.status, error.response.data);
+      }
+      throw new Error(error.response?.data?.message || error.message || 'Failed to fetch dashboard data');
     }
   },
   
@@ -150,7 +171,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/volume/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch feedback volume';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch feedback volume');
     }
   },
   
@@ -164,7 +186,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/resolution/${eventId}`);
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch resolution statistics';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch resolution statistics');
     }
   },
   
@@ -182,7 +205,8 @@ const analyticsService = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to export analytics data';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to export analytics data');
     }
   },
   
@@ -197,7 +221,8 @@ const analyticsService = {
       const response = await api.get(`/analytics/wordcloud/${eventId}`, { params });
       return response.data.data;
     } catch (error) {
-      throw error.response?.data?.message || 'Failed to fetch word cloud data';
+      console.error('API Error:', error);
+      throw new Error(error.response?.data?.message || 'Failed to fetch word cloud data');
     }
   }
 };
