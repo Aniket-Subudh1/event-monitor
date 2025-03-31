@@ -16,18 +16,20 @@ import {
 const Settings = () => {
   const { user, updateProfile, updateAlertPreferences, logout } = useContext(AuthContext);
   
+  // Ensure user exists and provide default values
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
     email: user?.email || '',
     role: user?.role || ''
   });
   
-  const [alertPreferences, setAlertPreferences] = useState(user?.alertPreferences || {
-    emailNotifications: true,
-    pushNotifications: true,
+  // Provide default alert preferences if user.alertPreferences is undefined
+  const [alertPreferences, setAlertPreferences] = useState({
+    emailNotifications: user?.alertPreferences?.emailNotifications ?? true,
+    pushNotifications: user?.alertPreferences?.pushNotifications ?? true,
     alertThresholds: {
-      negative: -0.5,
-      critical: 3
+      negative: user?.alertPreferences?.alertThresholds?.negative ?? -0.5,
+      critical: user?.alertPreferences?.alertThresholds?.critical ?? 3
     }
   });
   
@@ -42,23 +44,22 @@ const Settings = () => {
   
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
-    setProfileData({
-      ...profileData,
+    setProfileData(prev => ({
+      ...prev,
       [name]: value
-    });
+    }));
   };
   
   const handleAlertPreferencesChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    // Handle nested preferences
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setAlertPreferences(prev => ({
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: type === 'checkbox' ? checked : value
+          [child]: type === 'checkbox' ? checked : Number(value) // Convert to number for threshold values
         }
       }));
     } else {
@@ -125,6 +126,15 @@ const Settings = () => {
       setLoading(false);
     }
   };
+
+  // Add loading state if user data isn't available yet
+  if (!user) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader size="lg" />
+      </div>
+    );
+  }
   
   return (
     <div className="p-6">
@@ -336,7 +346,7 @@ const Settings = () => {
           </form>
         </Card>
         
-        {/* Privacy & Security */}
+        {/* Privacy & Integrations */}
         <Card>
           <div className="flex items-center mb-4">
             <Shield size={20} className="mr-2 text-blue-500" />
@@ -394,10 +404,10 @@ const Settings = () => {
                 name="currentPassword"
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 value={passwordData.currentPassword}
-                onChange={(e) => setPasswordData({
-                  ...passwordData,
+                onChange={(e) => setPasswordData(prev => ({
+                  ...prev,
                   currentPassword: e.target.value
-                })}
+                }))}
                 required
               />
             </div>
@@ -412,10 +422,10 @@ const Settings = () => {
                 name="newPassword"
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 value={passwordData.newPassword}
-                onChange={(e) => setPasswordData({
-                  ...passwordData,
+                onChange={(e) => setPasswordData(prev => ({
+                  ...prev,
                   newPassword: e.target.value
-                })}
+                }))}
                 required
               />
             </div>
@@ -430,10 +440,10 @@ const Settings = () => {
                 name="confirmPassword"
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 value={passwordData.confirmPassword}
-                onChange={(e) => setPasswordData({
-                  ...passwordData,
+                onChange={(e) => setPasswordData(prev => ({
+                  ...prev,
                   confirmPassword: e.target.value
-                })}
+                }))}
                 required
               />
             </div>
@@ -443,6 +453,7 @@ const Settings = () => {
                 type="button"
                 variant="secondary"
                 onClick={() => setShowPasswordModal(false)}
+                disabled={loading}
               >
                 Cancel
               </Button>
