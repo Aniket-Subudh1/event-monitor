@@ -4,7 +4,7 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { Loader } from '../components/common/Loader';
-import { Calendar, MapPin, Clock, User, Edit, Trash2, Power, PowerOff } from 'react-feather';
+import { Calendar, MapPin, Clock, User, Edit, Trash2, Power, ZapOff } from 'react-feather';
 
 const EventForm = ({ event, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -248,7 +248,7 @@ const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelect
             className="p-1 rounded-full text-gray-400 hover:text-gray-500"
             title={event.isActive ? 'Deactivate' : 'Activate'}
           >
-            {event.isActive ? <PowerOff size={18} /> : <Power size={18} />}
+            {event.isActive ? <ZapOff size={18} /> : <Power size={18} />}
           </button>
           
           <button

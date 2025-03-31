@@ -14,7 +14,7 @@ import {
   Settings, 
   RefreshCw, 
   Power, 
-  PowerOff,
+  ZapOff,
   AlertCircle,
   Check,
   MessageCircle
@@ -61,7 +61,7 @@ const IntegrationCard = ({
               variant="outline"
               size="sm"
               onClick={onDisconnect}
-              icon={<PowerOff size={16} />}
+              icon={<ZapOff size={16} />}
             >
               Disconnect
             </Button>
