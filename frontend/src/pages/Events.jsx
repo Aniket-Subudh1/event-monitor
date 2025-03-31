@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { EventContext } from '../context/EventContext';
 import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { Loader } from '../components/common/Loader';
-import { Calendar, MapPin, Clock, User, Edit, Trash2, Power, ZapOff } from 'react-feather';
+import { Calendar, MapPin, Clock, Edit, Trash2, Power, ZapOff } from 'react-feather';
 
 const EventForm = ({ event, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -174,7 +174,7 @@ const EventForm = ({ event, onSubmit, onCancel }) => {
   );
 };
 
-const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelected }) => {
+const EventCard = React.memo(({ event, onEdit, onDelete, onToggleActive, onSelect, isSelected }) => {
   const startDate = new Date(event.startDate);
   const endDate = new Date(event.endDate);
   
@@ -182,7 +182,6 @@ const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelect
   const today = new Date();
   const isUpcoming = startDate > today;
   const isOngoing = startDate <= today && endDate >= today;
-  const isPast = endDate < today;
   
   let timeStatus;
   let timeStatusClass;
@@ -244,7 +243,7 @@ const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelect
         
         <div className="flex space-x-2">
           <button
-            onClick={() => onToggleActive(event.id)}
+            onClick={() => onToggleActive(event._id)}
             className="p-1 rounded-full text-gray-400 hover:text-gray-500"
             title={event.isActive ? 'Deactivate' : 'Activate'}
           >
@@ -260,7 +259,7 @@ const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelect
           </button>
           
           <button
-            onClick={() => onDelete(event.id)}
+            onClick={() => onDelete(event._id)}
             className="p-1 rounded-full text-gray-400 hover:text-red-500"
             title="Delete"
           >
@@ -270,7 +269,7 @@ const EventCard = ({ event, onEdit, onDelete, onToggleActive, onSelect, isSelect
       </div>
     </Card>
   );
-};
+});
 
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, eventName, isDeleting }) => {
   return (
@@ -330,50 +329,58 @@ const Events = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all', 'active', 'inactive'
   
+  // Only fetch events on initial component mount
   useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+    // Only fetch if we don't already have events
+    if (events.length === 0 && !loading) {
+      fetchEvents();
+    }
+  }, [fetchEvents, events.length, loading]);
   
-  const handleCreateSubmit = async (eventData) => {
+  const handleCreateSubmit = useCallback(async (eventData) => {
     await createEvent(eventData);
     setShowCreateModal(false);
-  };
+  }, [createEvent]);
   
-  const handleEditSubmit = async (eventData) => {
-    await updateEvent(currentEvent.id, eventData);
+  const handleEditSubmit = useCallback(async (eventData) => {
+    if (!currentEvent || !currentEvent._id) return;
+    await updateEvent(currentEvent._id, eventData);
     setShowEditModal(false);
-  };
+  }, [currentEvent, updateEvent]);
   
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!currentEvent || !currentEvent._id) return;
     try {
       setIsDeleting(true);
-      await deleteEvent(currentEvent.id);
+      await deleteEvent(currentEvent._id);
       setShowDeleteModal(false);
     } catch (error) {
       console.error('Delete error:', error);
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [currentEvent, deleteEvent]);
   
-  const handleEdit = (event) => {
+  const handleEdit = useCallback((event) => {
     setCurrentEvent(event);
     setShowEditModal(true);
-  };
+  }, []);
   
-  const handleDelete = (eventId) => {
-    const event = events.find(e => e.id === eventId);
-    setCurrentEvent(event);
-    setShowDeleteModal(true);
-  };
+  const handleDelete = useCallback((eventId) => {
+    const event = events.find(e => e._id === eventId);
+    if (event) {
+      setCurrentEvent(event);
+      setShowDeleteModal(true);
+    }
+  }, [events]);
   
-  const handleToggleActive = async (eventId) => {
+  const handleToggleActive = useCallback(async (eventId) => {
     await toggleEventActive(eventId);
-  };
+  }, [toggleEventActive]);
   
-  const handleSelectEvent = (event) => {
+  const handleSelectEvent = useCallback((event) => {
     setSelectedEvent(event);
-  };
+  }, [setSelectedEvent]);
   
   // Filter events based on selected filter
   const filteredEvents = events.filter(event => {
@@ -452,13 +459,13 @@ const Events = () => {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredEvents.map(event => (
             <EventCard
-              key={event.id}
+              key={event._id}
               event={event}
               onEdit={handleEdit}
               onDelete={handleDelete}
               onToggleActive={handleToggleActive}
               onSelect={handleSelectEvent}
-              isSelected={selectedEvent && selectedEvent.id === event.id}
+              isSelected={selectedEvent && selectedEvent._id === event._id}
             />
           ))}
         </div>

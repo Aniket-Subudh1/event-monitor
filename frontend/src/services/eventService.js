@@ -8,9 +8,24 @@ const eventService = {
    */
   getEvents: async (params = {}) => {
     try {
-      const response = await api.get('/events', { params });
-      return response.data;
+      // Add a cache-breaking parameter to prevent 304 Not Modified responses
+      const uniqueParams = {
+        ...params,
+        _t: Date.now() // Add timestamp to force server to return fresh data
+      };
+      
+      const response = await api.get('/events', { params: uniqueParams });
+      
+      // Add a console log to help debug response structure
+      console.log('API response for events:', response.data);
+      
+      // Ensure we're returning the correct data structure
+      return {
+        ...response.data,
+        data: Array.isArray(response.data.data) ? response.data.data : []
+      };
     } catch (error) {
+      console.error('Error fetching events:', error);
       throw error.response?.data?.message || 'Failed to fetch events';
     }
   },

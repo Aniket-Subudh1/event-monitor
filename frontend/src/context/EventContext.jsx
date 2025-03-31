@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import eventService from '../services/eventService';
 import { AuthContext } from './AuthContext';
 
@@ -10,36 +10,21 @@ export const EventProvider = ({ children }) => {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [lastFetchTime, setLastFetchTime] = useState(null);
 
-  // Load events when user changes
-  useEffect(() => {
-    if (user) {
-      fetchEvents();
+  // Use useCallback to memoize the fetchEvents function to prevent recreation on each render
+  const fetchEvents = useCallback(async () => {
+    // Debounce fetches - don't fetch if we've fetched in the last second
+    const now = Date.now();
+    if (lastFetchTime && now - lastFetchTime < 1000) {
+      return;
     }
-  }, [user]);
-
-  // Load selected event from localStorage
-  useEffect(() => {
-    const savedEventId = localStorage.getItem('selectedEventId');
-    if (savedEventId && events.length > 0) {
-      const event = events.find(e => e.id === savedEventId);
-      if (event) {
-        setSelectedEvent(event);
-      }
-    }
-  }, [events]);
-
-  // Save selected event to localStorage
-  useEffect(() => {
-    if (selectedEvent) {
-      localStorage.setItem('selectedEventId', selectedEvent.id);
-    }
-  }, [selectedEvent]);
-
-  const fetchEvents = async () => {
+    
     try {
       setLoading(true);
       setError(null);
+      setLastFetchTime(now);
+      
       const response = await eventService.getEvents({ active: true });
       setEvents(response.data);
       
@@ -53,7 +38,34 @@ export const EventProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [lastFetchTime, selectedEvent]);
+
+  // Load events when user changes
+  useEffect(() => {
+    if (user) {
+      fetchEvents();
+    }
+  }, [user, fetchEvents]);
+
+  // Load selected event from localStorage - only once on component mount
+  useEffect(() => {
+    if (events.length > 0 && !selectedEvent) {
+      const savedEventId = localStorage.getItem('selectedEventId');
+      if (savedEventId) {
+        const event = events.find(e => e._id === savedEventId);
+        if (event) {
+          setSelectedEvent(event);
+        }
+      }
+    }
+  }, [events, selectedEvent]);
+
+  // Save selected event to localStorage
+  useEffect(() => {
+    if (selectedEvent) {
+      localStorage.setItem('selectedEventId', selectedEvent._id);
+    }
+  }, [selectedEvent]);
 
   const createEvent = async (eventData) => {
     try {
@@ -76,11 +88,11 @@ export const EventProvider = ({ children }) => {
       setError(null);
       const updatedEvent = await eventService.updateEvent(eventId, eventData);
       setEvents(prev => prev.map(event => (
-        event.id === eventId ? updatedEvent : event
+        event._id === eventId ? updatedEvent : event
       )));
       
       // Update selected event if it's the one updated
-      if (selectedEvent && selectedEvent.id === eventId) {
+      if (selectedEvent && selectedEvent._id === eventId) {
         setSelectedEvent(updatedEvent);
       }
       
@@ -98,10 +110,10 @@ export const EventProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       await eventService.deleteEvent(eventId);
-      setEvents(prev => prev.filter(event => event.id !== eventId));
+      setEvents(prev => prev.filter(event => event._id !== eventId));
       
       // Clear selected event if it's the one deleted
-      if (selectedEvent && selectedEvent.id === eventId) {
+      if (selectedEvent && selectedEvent._id === eventId) {
         setSelectedEvent(null);
         localStorage.removeItem('selectedEventId');
       }
@@ -123,11 +135,11 @@ export const EventProvider = ({ children }) => {
       
       // Update events list
       setEvents(prev => prev.map(event => (
-        event.id === eventId ? { ...event, isActive: result.isActive } : event
+        event._id === eventId ? { ...event, isActive: result.isActive } : event
       )));
       
       // Update selected event if it's the one toggled
-      if (selectedEvent && selectedEvent.id === eventId) {
+      if (selectedEvent && selectedEvent._id === eventId) {
         setSelectedEvent(prev => ({ ...prev, isActive: result.isActive }));
       }
       
