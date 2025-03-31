@@ -41,7 +41,6 @@ const connectDB = async () => {
   } catch (error) {
     logger.error(`MongoDB Connection Error: ${error.message}`);
     
-
     if (process.env.NODE_ENV === 'production') {
       console.error('Critical: Unable to connect to MongoDB. Exiting...');
       process.exit(1);

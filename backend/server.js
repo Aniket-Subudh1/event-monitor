@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -9,14 +8,13 @@ const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
 
-// Set up environment variables early
 dotenv.config();
 
-// Import after environment setup
-const connectDB = require('./config/db');
+
+const { connectDB } = require('./config/db');  
 const logger = require('./utils/logger');
 
-// Ensure logs directory exists
+
 if (!fs.existsSync(path.join(__dirname, 'logs'))) {
   try {
     fs.mkdirSync(path.join(__dirname, 'logs'));
@@ -26,7 +24,7 @@ if (!fs.existsSync(path.join(__dirname, 'logs'))) {
   }
 }
 
-// Log environment information
+
 console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`SKIP_NLP_MODELS: ${process.env.SKIP_NLP_MODELS}`);
 
@@ -34,7 +32,6 @@ console.log(`SKIP_NLP_MODELS: ${process.env.SKIP_NLP_MODELS}`);
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
   logger.error('UNCAUGHT EXCEPTION:', { error: err.stack || err.message || err });
-  // Don't exit in development
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
@@ -65,7 +62,6 @@ const initializeServer = async () => {
     
     // Set up socket handlers after MongoDB connection
     try {
-      // Import dynamically to avoid early initialization issues
       const socketManager = require('./config/socketManager');
       socketManager(io);
       console.log('Socket.IO handlers initialized');
@@ -120,7 +116,6 @@ initializeServer();
 process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION:', err);
   logger.error('UNHANDLED REJECTION:', { error: err.stack || err.message || err });
-  // Don't exit in development
   if (process.env.NODE_ENV === 'production') {
     server.close(() => process.exit(1));
   }
