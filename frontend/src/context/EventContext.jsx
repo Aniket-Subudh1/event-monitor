@@ -1,0 +1,161 @@
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import eventService from '../services/eventService';
+import { AuthContext } from './AuthContext';
+
+export const EventContext = createContext();
+
+export const EventProvider = ({ children }) => {
+  const { user } = useContext(AuthContext);
+  const [events, setEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Load events when user changes
+  useEffect(() => {
+    if (user) {
+      fetchEvents();
+    }
+  }, [user]);
+
+  // Load selected event from localStorage
+  useEffect(() => {
+    const savedEventId = localStorage.getItem('selectedEventId');
+    if (savedEventId && events.length > 0) {
+      const event = events.find(e => e.id === savedEventId);
+      if (event) {
+        setSelectedEvent(event);
+      }
+    }
+  }, [events]);
+
+  // Save selected event to localStorage
+  useEffect(() => {
+    if (selectedEvent) {
+      localStorage.setItem('selectedEventId', selectedEvent.id);
+    }
+  }, [selectedEvent]);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await eventService.getEvents({ active: true });
+      setEvents(response.data);
+      
+      // Select first event if none selected
+      if (response.data.length > 0 && !selectedEvent) {
+        setSelectedEvent(response.data[0]);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to fetch events');
+      console.error('Fetch events error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createEvent = async (eventData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const newEvent = await eventService.createEvent(eventData);
+      setEvents(prev => [...prev, newEvent]);
+      return newEvent;
+    } catch (err) {
+      setError(err.message || 'Failed to create event');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEvent = async (eventId, eventData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const updatedEvent = await eventService.updateEvent(eventId, eventData);
+      setEvents(prev => prev.map(event => (
+        event.id === eventId ? updatedEvent : event
+      )));
+      
+      // Update selected event if it's the one updated
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(updatedEvent);
+      }
+      
+      return updatedEvent;
+    } catch (err) {
+      setError(err.message || 'Failed to update event');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteEvent = async (eventId) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await eventService.deleteEvent(eventId);
+      setEvents(prev => prev.filter(event => event.id !== eventId));
+      
+      // Clear selected event if it's the one deleted
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(null);
+        localStorage.removeItem('selectedEventId');
+      }
+      
+      return true;
+    } catch (err) {
+      setError(err.message || 'Failed to delete event');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleEventActive = async (eventId) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await eventService.toggleEventActive(eventId);
+      
+      // Update events list
+      setEvents(prev => prev.map(event => (
+        event.id === eventId ? { ...event, isActive: result.isActive } : event
+      )));
+      
+      // Update selected event if it's the one toggled
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(prev => ({ ...prev, isActive: result.isActive }));
+      }
+      
+      return result;
+    } catch (err) {
+      setError(err.message || 'Failed to toggle event status');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const value = {
+    events,
+    selectedEvent,
+    setSelectedEvent,
+    loading,
+    error,
+    fetchEvents,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    toggleEventActive
+  };
+
+  return (
+    <EventContext.Provider value={value}>
+      {children}
+    </EventContext.Provider>
+  );
+};
