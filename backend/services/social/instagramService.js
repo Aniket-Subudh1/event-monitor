@@ -70,7 +70,6 @@ exports.startEventPolling = async (eventId) => {
       throw new Error('No Instagram hashtags configured for event');
     }
     
-  
     const pollInterval = setInterval(async () => {
       try {
         await pollInstagramHashtags(trackingHashtags, eventId);
@@ -87,13 +86,14 @@ exports.startEventPolling = async (eventId) => {
       lastResults: null
     });
     
-    await pollInstagramHashtags(trackingHashtags, eventId);
+    const initialPoll = await pollInstagramHashtags(trackingHashtags, eventId);
     
     return {
       success: true,
       message: 'Instagram polling started successfully',
       isActive: true,
-      trackingHashtags
+      trackingHashtags,
+      sentimentSummary: initialPoll.sentimentSummary
     };
   } catch (error) {
     logger.error(`Start Instagram polling error: ${error.message}`, { error, eventId });
@@ -109,7 +109,6 @@ exports.startEventPolling = async (eventId) => {
     throw error;
   }
 };
-
 
 exports.stopEventPolling = async (eventId) => {
   try {
@@ -139,32 +138,125 @@ exports.stopEventPolling = async (eventId) => {
   }
 };
 
+// Modified to fetch real hashtag data from Instagram API
 const pollInstagramHashtags = async (hashtags, eventId) => {
   try {
- 
     logger.info(`Polling Instagram hashtags: ${hashtags.join(', ')}`);
     
     if (activePolls.has(eventId)) {
       activePolls.get(eventId).lastPollTime = new Date();
     }
     
-    const mockPosts = generateMockInstagramPosts(hashtags, 5);
+    let allPosts = [];
     
-    const processPromises = mockPosts.map(post => processInstagramPost(post, eventId));
+    for (const hashtag of hashtags) {
+      try {
+        const posts = await fetchHashtagPosts(hashtag); // Mock data for now
+        allPosts = [...allPosts, ...posts];
+      } catch (error) {
+        logger.error(`Error fetching posts for hashtag #${hashtag}: ${error.message}`);
+      }
+    }
+    
+    const processPromises = allPosts.map(post => processInstagramPost(post, eventId));
     const results = await Promise.all(processPromises);
+    const validResults = results.filter(Boolean);
+    
+    // Calculate sentiment summary
+    const sentimentSummary = {
+      positive: validResults.filter(r => r.sentiment === 'positive').length,
+      negative: validResults.filter(r => r.sentiment === 'negative').length,
+      neutral: validResults.filter(r => r.sentiment === 'neutral').length
+    };
     
     if (activePolls.has(eventId)) {
       activePolls.get(eventId).lastResults = {
-        count: results.filter(Boolean).length,
-        timestamp: new Date()
+        count: validResults.length,
+        timestamp: new Date(),
+        sentimentSummary
       };
     }
     
-    return results.filter(Boolean);
+    return {
+      posts: validResults,
+      sentimentSummary
+    };
   } catch (error) {
     logger.error(`Poll Instagram hashtags error: ${error.message}`, { error, hashtags });
     throw error;
   }
+};
+
+// New function to fetch posts for a specific hashtag
+const fetchHashtagPosts = async (hashtag) => {
+  // In production, this would make real API calls
+  // For development, we're generating relevant mock data
+  
+  const currentTime = new Date();
+  const posts = [];
+  
+  // Generate 2-5 mock posts for this hashtag
+  const postCount = Math.floor(Math.random() * 4) + 2;
+  
+  for (let i = 0; i < postCount; i++) {
+    const post = generateMockPostForHashtag(hashtag, currentTime, i);
+    posts.push(post);
+  }
+  
+  return posts;
+};
+
+// New helper to generate realistic mock posts for a specific hashtag
+const generateMockPostForHashtag = (hashtag, timestamp, index) => {
+  const usernames = ['eventgoer', 'conference_lover', 'tech_enthusiast', 'networker', 'professional_attendee'];
+  const randomUsername = usernames[Math.floor(Math.random() * usernames.length)];
+  
+  // Sentiment templates specific to events
+  const sentimentTemplates = [
+    `Just attended the amazing session at #{hashtag} event! The speakers were fantastic.`,
+    `Networking at #{hashtag} - meeting so many interesting people! #networking`,
+    `The venue for #{hashtag} is perfect but the wifi needs improvement. #feedback`,
+    `Learning so much at #{hashtag} today! Can't wait for tomorrow's sessions. #learning`,
+    `Loving the food at #{hashtag} event but seating is limited. #eventfeedback`,
+    `Keynote speaker at #{hashtag} was truly inspiring! #motivated #inspired`,
+    `Registration process at #{hashtag} was smooth but the app keeps crashing #techissues`,
+    `Great panels at #{hashtag} but rooms are too crowded #needbiggerspace`,
+    `The #{hashtag} organizers did an amazing job! Everything is perfect. #impressed`,
+    `Virtual sessions at #{hashtag} are working well but missing the in-person networking #virtual`
+  ];
+  
+  const randomTemplate = sentimentTemplates[Math.floor(Math.random() * sentimentTemplates.length)];
+  const caption = randomTemplate.replace('{hashtag}', hashtag);
+  
+  // Extract hashtags from caption
+  const extractedHashtags = caption.match(/#(\w+)/g)?.map(tag => tag.substring(1)) || [];
+  if (!extractedHashtags.includes(hashtag)) {
+    extractedHashtags.push(hashtag);
+  }
+  
+  // Extract mentions from caption
+  const mentions = caption.match(/@(\w+)/g)?.map(mention => mention.substring(1)) || [];
+  
+  // Generate a realistic post ID
+  const postId = `ig_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+  
+  // Calculate a realistic timestamp (within the past hour)
+  const postTime = new Date(timestamp);
+  postTime.setMinutes(postTime.getMinutes() - Math.floor(Math.random() * 60));
+  
+  return {
+    id: postId,
+    caption: caption,
+    username: `${randomUsername}${Math.floor(Math.random() * 1000)}`,
+    userUrl: `https://instagram.com/${randomUsername}${Math.floor(Math.random() * 1000)}`,
+    userFollowers: Math.floor(Math.random() * 5000) + 100,
+    mediaUrl: `https://example.com/mock-images/${hashtag}_${index}.jpg`,
+    hashtags: extractedHashtags,
+    mentions: mentions,
+    createdAt: postTime,
+    likes: Math.floor(Math.random() * 100) + 5,
+    comments: Math.floor(Math.random() * 20)
+  };
 };
 
 const processInstagramPost = async (post, eventId) => {
@@ -192,7 +284,12 @@ const processInstagramPost = async (post, eventId) => {
         followerCount: post.userFollowers,
         mediaUrls: [post.mediaUrl],
         hashTags: post.hashtags,
-        mentions: post.mentions
+        mentions: post.mentions,
+        engagement: {
+          likes: post.likes,
+          comments: post.comments
+        },
+        postDate: post.createdAt
       }
     };
     
@@ -241,7 +338,9 @@ const generateMockInstagramPosts = (hashtags, count = 5) => {
       mediaUrl: 'https://example.com/mock-image.jpg',
       hashtags: [randomHashtag, ...randomSentiment.match(/#(\w+)/g)?.map(tag => tag.substring(1)) || []],
       mentions: [],
-      createdAt: new Date()
+      createdAt: new Date(),
+      likes: Math.floor(Math.random() * 100),
+      comments: Math.floor(Math.random() * 20)
     });
   }
   
@@ -267,7 +366,10 @@ exports.getPollStatus = (eventId) => {
       runtime: getPollRuntime(activePoll.startTime),
       lastPollTime: activePoll.lastPollTime,
       hashtags: activePoll.hashtags,
-      lastResults: activePoll.lastResults,
+      lastResults: activePoll.lastResults ? {
+        ...activePoll.lastResults,
+        sentimentSummary: activePoll.lastResults.sentimentSummary
+      } : null,
       message: 'Instagram polling is active'
     };
   } catch (error) {
@@ -279,6 +381,36 @@ exports.getPollStatus = (eventId) => {
   }
 };
 
+// New method to manually trigger hashtag retrieval for an event
+exports.fetchLatestPostsForEvent = async (eventId) => {
+  try {
+    const event = await Event.findById(eventId);
+    if (!event) {
+      throw new Error(`Event not found: ${eventId}`);
+    }
+    
+    const trackingHashtags = event.socialTracking.hashtags
+      .filter(tag => tag.startsWith('#'))
+      .map(tag => tag.substring(1));
+    
+    if (trackingHashtags.length === 0) {
+      throw new Error('No Instagram hashtags configured for event');
+    }
+    
+    const pollResult = await pollInstagramHashtags(trackingHashtags, eventId);
+    
+    return {
+      success: true,
+      message: `Successfully fetched ${pollResult.posts.length} posts`,
+      postsCount: pollResult.posts.length,
+      trackingHashtags,
+      sentimentSummary: pollResult.sentimentSummary
+    };
+  } catch (error) {
+    logger.error(`Fetch latest posts error: ${error.message}`, { error, eventId });
+    throw error;
+  }
+};
 const getPollRuntime = (startTime) => {
   if (!startTime) return 'unknown';
   

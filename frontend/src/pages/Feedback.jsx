@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { EventContext } from '../context/EventContext';
 import { SocketContext } from '../context/SocketContext';
 import { Card } from '../components/common/Card';
@@ -8,8 +8,8 @@ import { Loader } from '../components/common/Loader';
 import FeedbackTable from '../components/tables/FeedbackTable';
 import FeedbackForm from '../components/forms/FeedbackForm';
 import feedbackService from '../services/feedbackService';
+import debounce from 'lodash/debounce';
 
-// Icons
 import { 
   MessageCircle, 
   Filter, 
@@ -43,7 +43,6 @@ const Feedback = () => {
     severity: 'medium'
   });
   
-  // Filter states
   const [filters, setFilters] = useState({
     sentiment: '',
     source: '',
@@ -53,7 +52,6 @@ const Feedback = () => {
     search: ''
   });
   
-  // Pagination
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -61,55 +59,59 @@ const Feedback = () => {
     totalPages: 1
   });
   
+  const debouncedFetchFeedback = useCallback(
+    debounce(async (eventId, page, filters) => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await feedbackService.getEventFeedback(eventId, {
+          page,
+          limit: pagination.limit,
+          ...filters
+        });
+        
+        setFeedback(response.data);
+        setPagination({
+          ...pagination,
+          total: response.total,
+          totalPages: response.pagination.totalPages
+        });
+      } catch (err) {
+        console.error('Error fetching feedback:', err);
+        setError('Failed to load feedback data');
+      } finally {
+        setLoading(false);
+      }
+    }, 300),
+    [pagination.limit]
+  );
+
   useEffect(() => {
-    if (selectedEvent) {
-      fetchFeedback();
+    if (selectedEvent && selectedEvent._id) {
+      debouncedFetchFeedback(selectedEvent._id, pagination.page, filters);
+    } else {
+      console.log('No valid selectedEvent or event _id:', selectedEvent);
+      setLoading(false);
+      setError('No event selected or event ID is missing');
     }
-  }, [selectedEvent, pagination.page, filters]);
+  }, [selectedEvent, pagination.page, filters, debouncedFetchFeedback]);
   
-  // Listen for new feedback from socket
   useEffect(() => {
-    if (newFeedback && selectedEvent && newFeedback.event === selectedEvent.id) {
+    if (newFeedback && selectedEvent && newFeedback.event === selectedEvent._id) {
       setFeedback(prev => [newFeedback, ...prev]);
     }
   }, [newFeedback, selectedEvent]);
   
-  const fetchFeedback = async () => {
-    if (!selectedEvent) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await feedbackService.getEventFeedback(selectedEvent.id, {
-        page: pagination.page,
-        limit: pagination.limit,
-        ...filters
-      });
-      
-      setFeedback(response.data);
-      setPagination({
-        ...pagination,
-        total: response.total,
-        totalPages: response.pagination.totalPages
-      });
-    } catch (err) {
-      console.error('Error fetching feedback:', err);
-      setError('Failed to load feedback data');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const handleViewFeedback = (feedback) => {
-    setViewFeedback(feedback);
+  const handleViewFeedback = (feedbackItem) => {
+    setViewFeedback(feedbackItem);
     setIsModalOpen(true);
   };
   
   const handleDeleteFeedback = async (id) => {
     try {
       await feedbackService.deleteFeedback(id);
-      setFeedback(feedback.filter(item => item._id !== id));
+      setFeedback(prev => prev.filter(item => item._id !== id));
       setIsDeleteModalOpen(false);
     } catch (err) {
       console.error('Error deleting feedback:', err);
@@ -120,7 +122,7 @@ const Feedback = () => {
   const handleBatchProcess = async () => {
     try {
       await feedbackService.batchProcessFeedback(selectedFeedback, batchAction);
-      fetchFeedback();
+      debouncedFetchFeedback(selectedEvent._id, pagination.page, filters);
       setSelectedFeedback([]);
       setIsBatchModalOpen(false);
     } catch (err) {
@@ -131,16 +133,14 @@ const Feedback = () => {
   
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilters({
-      ...filters,
+    setFilters(prev => ({
+      ...prev,
       [name]: value
-    });
-    
-    // Reset to page 1 when filters change
-    setPagination({
-      ...pagination,
+    }));
+    setPagination(prev => ({
+      ...prev,
       page: 1
-    });
+    }));
   };
   
   const clearFilters = () => {
@@ -152,39 +152,33 @@ const Feedback = () => {
       endDate: '',
       search: ''
     });
+    setPagination(prev => ({
+      ...prev,
+      page: 1
+    }));
   };
   
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= pagination.totalPages) {
-      setPagination({
-        ...pagination,
+      setPagination(prev => ({
+        ...prev,
         page: newPage
-      });
+      }));
     }
   };
   
   const exportFeedback = async () => {
     try {
-      const data = await feedbackService.getEventFeedback(selectedEvent.id, {
+      const data = await feedbackService.getEventFeedback(selectedEvent._id, {
         limit: 1000,
         ...filters
       });
       
-      // Create CSV content
       let csv = 'ID,Sentiment,Score,Source,Text,Issue Type,Location,Created At\n';
-      
       data.data.forEach(item => {
-        csv += `${item._id},`;
-        csv += `${item.sentiment},`;
-        csv += `${item.sentimentScore},`;
-        csv += `${item.source},`;
-        csv += `"${item.text.replace(/"/g, '""')}",`; // Escape quotes in text
-        csv += `${item.issueType || ''},`;
-        csv += `${item.issueDetails?.location || ''},`;
-        csv += `${new Date(item.createdAt).toISOString()}\n`;
+        csv += `${item._id},${item.sentiment},${item.sentimentScore},${item.source},"${item.text.replace(/"/g, '""')}",${item.issueType || ''},${item.issueDetails?.location || ''},${new Date(item.createdAt).toISOString()}\n`;
       });
       
-      // Download CSV
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -199,7 +193,7 @@ const Feedback = () => {
       setError('Failed to export feedback');
     }
   };
-  
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -216,7 +210,7 @@ const Feedback = () => {
           
           <Button
             variant="primary"
-            onClick={fetchFeedback}
+            onClick={() => selectedEvent && selectedEvent._id ? debouncedFetchFeedback(selectedEvent._id, pagination.page, filters) : setError('No event selected')}
             icon={<RefreshCw size={16} />}
           >
             Refresh
@@ -247,10 +241,12 @@ const Feedback = () => {
         </div>
       ) : (
         <>
-          {/* Filters */}
           <Card className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-lg font-medium mb-4 sm:mb-0">Filters</h2>
+              <div className="flex items-center mb-4 sm:mb-0">
+                <Filter size={18} className="mr-2 text-gray-600" />
+                <h2 className="text-lg font-medium">Filters</h2>
+              </div>
               
               <div className="flex space-x-2">
                 {Object.values(filters).some(val => val !== '') && (
@@ -394,8 +390,7 @@ const Feedback = () => {
               </div>
             </div>
           </Card>
-          
-          {/* Batch Action Bar */}
+
           {selectedFeedback.length > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6 flex items-center justify-between">
               <div className="flex items-center">
@@ -425,7 +420,6 @@ const Feedback = () => {
             </div>
           )}
           
-          {/* Feedback Table */}
           <Card className="mb-6">
             {loading ? (
               <div className="flex justify-center items-center h-64">
@@ -452,7 +446,6 @@ const Feedback = () => {
                   setSelectedFeedback={setSelectedFeedback}
                 />
                 
-                {/* Pagination */}
                 <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6 mt-4">
                   <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                     <div>
@@ -505,215 +498,211 @@ const Feedback = () => {
               </>
             )}
           </Card>
-        </>
-      )}
-      
-      {/* Feedback Detail Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Feedback Details"
-      >
-        {viewFeedback && (
-          <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-              {viewFeedback.sentiment === 'positive' ? (
-                <Smile className="text-green-500" size={20} />
-              ) : viewFeedback.sentiment === 'negative' ? (
-                <Frown className="text-red-500" size={20} />
-              ) : (
-                <Meh className="text-gray-500" size={20} />
-              )}
-              <span className="font-medium capitalize">{viewFeedback.sentiment}</span>
-              <span className="text-sm text-gray-500">
-                (Score: {viewFeedback.sentimentScore.toFixed(2)})
-              </span>
-            </div>
-            
-            <div>
-              <h3 className="text-sm font-medium text-gray-700">Feedback</h3>
-              <p className="mt-1 text-gray-900">{viewFeedback.text}</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Source</h3>
-                <p className="mt-1 capitalize">{viewFeedback.source}</p>
-                {viewFeedback.metadata?.username && (
-                  <p className="text-sm text-gray-500">
-                    By: {viewFeedback.metadata.username}
-                  </p>
+
+          <Modal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            title="Feedback Details"
+          >
+            {viewFeedback && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  {viewFeedback.sentiment === 'positive' ? (
+                    <Smile className="text-green-500" size={20} />
+                  ) : viewFeedback.sentiment === 'negative' ? (
+                    <Frown className="text-red-500" size={20} />
+                  ) : (
+                    <Meh className="text-gray-500" size={20} />
+                  )}
+                  <span className="font-medium capitalize">{viewFeedback.sentiment}</span>
+                  <span className="text-sm text-gray-500">
+                    (Score: {viewFeedback.sentimentScore.toFixed(2)})
+                  </span>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700">Feedback</h3>
+                  <p className="mt-1 text-gray-900">{viewFeedback.text}</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">Source</h3>
+                    <p className="mt-1 capitalize">{viewFeedback.source}</p>
+                    {viewFeedback.metadata?.username && (
+                      <p className="text-sm text-gray-500">
+                        By: {viewFeedback.metadata.username}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">Date & Time</h3>
+                    <p className="mt-1">
+                      {new Date(viewFeedback.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">Issue Type</h3>
+                    <p className="mt-1 capitalize">
+                      {viewFeedback.issueType || 'Not classified'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">Location</h3>
+                    <p className="mt-1">
+                      {viewFeedback.issueDetails?.location || 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+                
+                {viewFeedback.metadata?.keywords?.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">Keywords</h3>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {viewFeedback.metadata.keywords.map((keyword, index) => (
+                        <span 
+                          key={index}
+                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
+          </Modal>
+          
+          <Modal
+            isOpen={isDeleteModalOpen}
+            onClose={() => setIsDeleteModalOpen(false)}
+            title="Delete Feedback"
+            footer={
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                
+                <Button
+                  variant="danger"
+                  onClick={() => handleDeleteFeedback(viewFeedback?._id)}
+                  icon={<Trash2 size={16} />}
+                >
+                  Delete
+                </Button>
+              </>
+            }
+          >
+            <p className="text-gray-700">
+              Are you sure you want to delete this feedback?
+            </p>
+            <p className="mt-2 text-sm text-gray-500">
+              This action cannot be undone.
+            </p>
+          </Modal>
+          
+          <Modal
+            isOpen={isBatchModalOpen}
+            onClose={() => setIsBatchModalOpen(false)}
+            title="Batch Process Feedback"
+            footer={
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsBatchModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                
+                <Button
+                  variant="primary"
+                  onClick={handleBatchProcess}
+                  icon={<CheckSquare size={16} />}
+                >
+                  Process {selectedFeedback.length} Items
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-gray-700">
+                Apply the following updates to {selectedFeedback.length} selected feedback items:
+              </p>
               
               <div>
-                <h3 className="text-sm font-medium text-gray-700">Date & Time</h3>
-                <p className="mt-1">
-                  {new Date(viewFeedback.createdAt).toLocaleString()}
-                </p>
+                <label htmlFor="batch-issueType" className="block text-sm font-medium text-gray-700">
+                  Issue Type
+                </label>
+                <select
+                  id="batch-issueType"
+                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                  value={batchAction.issueType}
+                  onChange={(e) => setBatchAction({...batchAction, issueType: e.target.value})}
+                >
+                  <option value="">No Change</option>
+                  <option value="queue">Queue/Waiting</option>
+                  <option value="audio">Audio</option>
+                  <option value="video">Video/Display</option>
+                  <option value="crowding">Crowding</option>
+                  <option value="amenities">Amenities</option>
+                  <option value="content">Content</option>
+                  <option value="temperature">Temperature</option>
+                  <option value="safety">Safety</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
               
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Issue Type</h3>
-                <p className="mt-1 capitalize">
-                  {viewFeedback.issueType || 'Not classified'}
-                </p>
+              <div className="flex items-center">
+                <input
+                  id="batch-processed"
+                  name="processed"
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  checked={batchAction.processed}
+                  onChange={(e) => setBatchAction({...batchAction, processed: e.target.checked})}
+                />
+                <label htmlFor="batch-processed" className="ml-2 block text-sm text-gray-900">
+                  Mark as processed
+                </label>
               </div>
               
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Location</h3>
-                <p className="mt-1">
-                  {viewFeedback.issueDetails?.location || 'Not specified'}
-                </p>
+              <div className="flex items-center">
+                <input
+                  id="batch-resolved"
+                  name="resolved"
+                  type="checkbox"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  checked={batchAction.resolved}
+                  onChange={(e) => setBatchAction({...batchAction, resolved: e.target.checked})}
+                />
+                <label htmlFor="batch-resolved" className="ml-2 block text-sm text-gray-900">
+                  Mark issues as resolved
+                </label>
               </div>
             </div>
-            
-            {viewFeedback.metadata?.keywords?.length > 0 && (
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Keywords</h3>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {viewFeedback.metadata.keywords.map((keyword, index) => (
-                    <span 
-                      key={index}
-                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
-                    >
-                      {keyword}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
-      
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title="Delete Feedback"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setIsDeleteModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            
-            <Button
-              variant="danger"
-              onClick={() => handleDeleteFeedback(viewFeedback?._id)}
-              icon={<Trash2 size={16} />}
-            >
-              Delete
-            </Button>
-          </>
-        }
-      >
-        <p className="text-gray-700">
-          Are you sure you want to delete this feedback?
-        </p>
-        <p className="mt-2 text-sm text-gray-500">
-          This action cannot be undone.
-        </p>
-      </Modal>
-      
-      {/* Batch Process Modal */}
-      <Modal
-        isOpen={isBatchModalOpen}
-        onClose={() => setIsBatchModalOpen(false)}
-        title="Batch Process Feedback"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setIsBatchModalOpen(false)}
-            >
-              Cancel
-            </Button>
-            
-            <Button
-              variant="primary"
-              onClick={handleBatchProcess}
-              icon={<CheckSquare size={16} />}
-            >
-              Process {selectedFeedback.length} Items
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-gray-700">
-            Apply the following updates to {selectedFeedback.length} selected feedback items:
-          </p>
+          </Modal>
           
-          <div>
-            <label htmlFor="batch-issueType" className="block text-sm font-medium text-gray-700">
-              Issue Type
-            </label>
-            <select
-              id="batch-issueType"
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-              value={batchAction.issueType}
-              onChange={(e) => setBatchAction({...batchAction, issueType: e.target.value})}
-            >
-              <option value="">No Change</option>
-              <option value="queue">Queue/Waiting</option>
-              <option value="audio">Audio</option>
-              <option value="video">Video/Display</option>
-              <option value="crowding">Crowding</option>
-              <option value="amenities">Amenities</option>
-              <option value="content">Content</option>
-              <option value="temperature">Temperature</option>
-              <option value="safety">Safety</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          
-          <div className="flex items-center">
-            <input
-              id="batch-processed"
-              name="processed"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              checked={batchAction.processed}
-              onChange={(e) => setBatchAction({...batchAction, processed: e.target.checked})}
+          <Modal
+            isOpen={isFeedbackFormOpen}
+            onClose={() => setIsFeedbackFormOpen(false)}
+            title="Add Feedback"
+          >
+            <FeedbackForm
+              onSuccess={() => {
+                setIsFeedbackFormOpen(false);
+                debouncedFetchFeedback(selectedEvent._id, pagination.page, filters);
+              }}
             />
-            <label htmlFor="batch-processed" className="ml-2 block text-sm text-gray-900">
-              Mark as processed
-            </label>
-          </div>
-          
-          <div className="flex items-center">
-            <input
-              id="batch-resolved"
-              name="resolved"
-              type="checkbox"
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              checked={batchAction.resolved}
-              onChange={(e) => setBatchAction({...batchAction, resolved: e.target.checked})}
-            />
-            <label htmlFor="batch-resolved" className="ml-2 block text-sm text-gray-900">
-              Mark issues as resolved
-            </label>
-          </div>
-        </div>
-      </Modal>
-      
-      {/* Add Feedback Modal */}
-      <Modal
-        isOpen={isFeedbackFormOpen}
-        onClose={() => setIsFeedbackFormOpen(false)}
-        title="Add Feedback"
-      >
-        <FeedbackForm
-          onSuccess={() => {
-            setIsFeedbackFormOpen(false);
-            fetchFeedback();
-          }}
-        />
-      </Modal>
+          </Modal>
+        </>
+      )}
     </div>
   );
 };

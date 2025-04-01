@@ -240,13 +240,21 @@ exports.linkedinWebhook = asyncHandler(async (req, res) => {
 
 
 exports.getEventFeedback = asyncHandler(async (req, res) => {
+  const eventId = req.params.eventId;
 
-  
+  if (!eventId || eventId === 'undefined') {
+    logger.error('Invalid eventId provided:', { eventId });
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid or missing event ID'
+    });
+  }
+
   const query = {
-    event: req.params.eventId
+    event: eventId
   };
-  
 
+  // Apply filters if provided
   if (req.query.sentiment) {
     query.sentiment = req.query.sentiment;
   }
@@ -259,7 +267,6 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     query.issueType = req.query.issueType;
   }
   
-
   if (req.query.startDate || req.query.endDate) {
     query.createdAt = {};
     
@@ -272,25 +279,23 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     }
   }
   
-
   if (req.query.search) {
     query.$text = { $search: req.query.search };
   }
-  
 
+  // Pagination
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 50;
   const startIndex = (page - 1) * limit;
   
- 
-  const total = await Feedback.countDocuments(query);
-  
+  logger.info('Fetching feedback with filters', { query, page, limit });
 
+  const total = await Feedback.countDocuments(query);
   const feedback = await Feedback.find(query)
     .skip(startIndex)
     .limit(limit)
     .sort({ createdAt: req.query.sort === 'asc' ? 1 : -1 });
-  
+
   res.status(200).json({
     success: true,
     count: feedback.length,
@@ -303,7 +308,6 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     data: feedback
   });
 });
-
 
 exports.getEventFeedbackStats = asyncHandler(async (req, res) => {
   const sentimentStats = await Feedback.aggregate([

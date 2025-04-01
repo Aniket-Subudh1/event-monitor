@@ -29,7 +29,6 @@ const feedbackService = {
       throw error.response?.data?.message || 'Failed to fetch feedback';
     }
   },
-  
   /**
    * Get feedback statistics for an event
    * @param {string} eventId - Event ID
