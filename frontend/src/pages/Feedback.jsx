@@ -62,26 +62,49 @@ const Feedback = () => {
   });
   
   useEffect(() => {
-    if (selectedEvent) {
+    // Only fetch feedback if we have a valid selectedEvent with an ID
+    if (selectedEvent && (selectedEvent.id || selectedEvent._id)) {
       fetchFeedback();
+    } else {
+      // Clear feedback if no event is selected
+      setFeedback([]);
+      setLoading(false);
     }
   }, [selectedEvent, pagination.page, filters]);
   
   // Listen for new feedback from socket
   useEffect(() => {
-    if (newFeedback && selectedEvent && newFeedback.event === selectedEvent.id) {
-      setFeedback(prev => [newFeedback, ...prev]);
+    if (newFeedback && selectedEvent) {
+      const eventId = selectedEvent.id || selectedEvent._id;
+      if (eventId && newFeedback.event === eventId) {
+        setFeedback(prev => [newFeedback, ...prev]);
+      }
     }
   }, [newFeedback, selectedEvent]);
   
   const fetchFeedback = async () => {
-    if (!selectedEvent) return;
+    if (!selectedEvent) {
+      setLoading(false);
+      return;
+    }
+    
+    // Get the event ID, handling both possible property names
+    const eventId = selectedEvent.id || selectedEvent._id;
+    
+    // Ensure we have a valid event ID before making the API call
+    if (!eventId) {
+      setError('No valid event ID found. Please select an event first.');
+      setLoading(false);
+      return;
+    }
     
     try {
       setLoading(true);
       setError(null);
       
-      const response = await feedbackService.getEventFeedback(selectedEvent.id, {
+      console.log(`Fetching feedback for event ID: ${eventId}`);
+      
+      const response = await feedbackService.getEventFeedback(eventId, {
         page: pagination.page,
         limit: pagination.limit,
         ...filters
@@ -95,7 +118,8 @@ const Feedback = () => {
       });
     } catch (err) {
       console.error('Error fetching feedback:', err);
-      setError('Failed to load feedback data');
+      setError('Failed to load feedback data: ' + (err.message || 'Unknown error'));
+      setFeedback([]);
     } finally {
       setLoading(false);
     }
@@ -164,8 +188,16 @@ const Feedback = () => {
   };
   
   const exportFeedback = async () => {
+    if (!selectedEvent) return;
+    
+    const eventId = selectedEvent.id || selectedEvent._id;
+    if (!eventId) {
+      setError('No valid event ID found. Please select an event first.');
+      return;
+    }
+    
     try {
-      const data = await feedbackService.getEventFeedback(selectedEvent.id, {
+      const data = await feedbackService.getEventFeedback(eventId, {
         limit: 1000,
         ...filters
       });
@@ -200,6 +232,34 @@ const Feedback = () => {
     }
   };
   
+  const handleSubmitFeedback = async (formData) => {
+    if (!selectedEvent) {
+      setError('Please select an event first');
+      return;
+    }
+    
+    const eventId = selectedEvent.id || selectedEvent._id;
+    if (!eventId) {
+      setError('No valid event ID found');
+      return;
+    }
+    
+    try {
+      // Make sure the event ID is included in the form data
+      const feedbackData = {
+        ...formData,
+        event: eventId
+      };
+      
+      await feedbackService.submitFeedback(feedbackData);
+      setIsFeedbackFormOpen(false);
+      fetchFeedback();
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      setError('Failed to submit feedback: ' + (err.message || 'Unknown error'));
+    }
+  };
+  
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -210,6 +270,7 @@ const Feedback = () => {
             variant="secondary"
             onClick={() => setIsFeedbackFormOpen(true)}
             icon={<MessageCircle size={16} />}
+            disabled={!selectedEvent}
           >
             Add Feedback
           </Button>
@@ -218,6 +279,7 @@ const Feedback = () => {
             variant="primary"
             onClick={fetchFeedback}
             icon={<RefreshCw size={16} />}
+            disabled={!selectedEvent}
           >
             Refresh
           </Button>
@@ -247,6 +309,16 @@ const Feedback = () => {
         </div>
       ) : (
         <>
+          {/* Event Info */}
+          <div className="mb-6 bg-blue-50 p-4 rounded-md">
+            <h2 className="text-lg font-medium">
+              Selected Event: {selectedEvent.name} 
+              <span className="ml-2 text-sm text-gray-500">
+                (ID: {selectedEvent.id || selectedEvent._id})
+              </span>
+            </h2>
+          </div>
+          
           {/* Filters */}
           <Card className="mb-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -268,6 +340,7 @@ const Feedback = () => {
                   size="sm"
                   onClick={exportFeedback}
                   icon={<Download size={14} />}
+                  disabled={!selectedEvent}
                 >
                   Export
                 </Button>
@@ -474,19 +547,95 @@ const Feedback = () => {
                           </svg>
                         </button>
                         
-                        {[...Array(pagination.totalPages).keys()].map((page) => (
-                          <button
-                            key={page + 1}
-                            onClick={() => handlePageChange(page + 1)}
-                            className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                              pagination.page === page + 1
-                                ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                                : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                            }`}
-                          >
-                            {page + 1}
-                          </button>
-                        ))}
+                        {pagination.totalPages <= 7 ? (
+                          // Show all pages if there are 7 or fewer
+                          [...Array(pagination.totalPages).keys()].map((page) => (
+                            <button
+                              key={page + 1}
+                              onClick={() => handlePageChange(page + 1)}
+                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                pagination.page === page + 1
+                                  ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                  : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page + 1}
+                            </button>
+                          ))
+                        ) : (
+                          // Show a limited subset with ellipses if more than 7 pages
+                          <>
+                            {/* First page */}
+                            <button
+                              onClick={() => handlePageChange(1)}
+                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                pagination.page === 1
+                                  ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                  : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              1
+                            </button>
+                            
+                            {/* Ellipsis for skipped pages at the beginning */}
+                            {pagination.page > 3 && (
+                              <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                ...
+                              </span>
+                            )}
+                            
+                            {/* Pages around current page */}
+                            {[...Array(5)].map((_, i) => {
+                              // Calculate the page number
+                              let pageNumber;
+                              if (pagination.page <= 3) {
+                                pageNumber = i + 2; // Show pages 2-6
+                              } else if (pagination.page >= pagination.totalPages - 2) {
+                                pageNumber = pagination.totalPages - 4 + i; // Show last 5 pages (minus first and last)
+                              } else {
+                                pageNumber = pagination.page - 2 + i; // Show 2 before and 2 after current page
+                              }
+                              
+                              // Skip if page number is out of range or is first/last page
+                              if (pageNumber <= 1 || pageNumber >= pagination.totalPages) {
+                                return null;
+                              }
+                              
+                              return (
+                                <button
+                                  key={pageNumber}
+                                  onClick={() => handlePageChange(pageNumber)}
+                                  className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                    pagination.page === pageNumber
+                                      ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {pageNumber}
+                                </button>
+                              );
+                            })}
+                            
+                            {/* Ellipsis for skipped pages at the end */}
+                            {pagination.page < pagination.totalPages - 2 && (
+                              <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                ...
+                              </span>
+                            )}
+                            
+                            {/* Last page */}
+                            <button
+                              onClick={() => handlePageChange(pagination.totalPages)}
+                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                pagination.page === pagination.totalPages
+                                  ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                                  : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pagination.totalPages}
+                            </button>
+                          </>
+                        )}
                         
                         <button
                           onClick={() => handlePageChange(pagination.page + 1)}
@@ -707,12 +856,122 @@ const Feedback = () => {
         onClose={() => setIsFeedbackFormOpen(false)}
         title="Add Feedback"
       >
-        <FeedbackForm
-          onSuccess={() => {
-            setIsFeedbackFormOpen(false);
-            fetchFeedback();
-          }}
-        />
+        {selectedEvent ? (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-md mb-4">
+              <p className="text-sm text-gray-700">
+                Adding feedback for event: <strong>{selectedEvent.name}</strong>
+              </p>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target);
+              
+              handleSubmitFeedback({
+                text: formData.get('text'),
+                source: formData.get('source'),
+                issueDetails: {
+                  location: formData.get('location')
+                },
+                metadata: {
+                  username: formData.get('username') || 'Anonymous Staff'
+                }
+              });
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="text" className="block text-sm font-medium text-gray-700">
+                    Feedback Text *
+                  </label>
+                  <textarea
+                    id="text"
+                    name="text"
+                    rows="4"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    placeholder="Enter feedback text here..."
+                    required
+                  ></textarea>
+                </div>
+                
+                <div>
+                  <label htmlFor="source" className="block text-sm font-medium text-gray-700">
+                    Source
+                  </label>
+                  <select
+                    id="source"
+                    name="source"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    defaultValue="direct"
+                  >
+                    <option value="direct">Direct</option>
+                    <option value="app_chat">App Chat</option>
+                    <option value="survey">Survey</option>
+                  </select>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="location" className="block text-sm font-medium text-gray-700">
+                      Location
+                    </label>
+                    <input
+                      type="text"
+                      id="location"
+                      name="location"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      placeholder="E.g. Main Hall, Room 3, etc."
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                      Submitted By
+                    </label>
+                    <input
+                      type="text"
+                      id="username"
+                      name="username"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      placeholder="Staff name or Anonymous"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex justify-end space-x-3 pt-4">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setIsFeedbackFormOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  
+                  <Button
+                    type="submit"
+                    variant="primary"
+                  >
+                    Submit Feedback
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="text-center py-4">
+            <p className="text-red-500">Please select an event first.</p>
+            <Button
+              variant="primary"
+              className="mt-4"
+              onClick={() => {
+                setIsFeedbackFormOpen(false);
+                window.location.href = '/events';
+              }}
+            >
+              Go to Events
+            </Button>
+          </div>
+        )}
       </Modal>
     </div>
   );

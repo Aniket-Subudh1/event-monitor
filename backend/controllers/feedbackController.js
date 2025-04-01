@@ -69,35 +69,49 @@ exports.submitFeedback = asyncHandler(async (req, res) => {
 });
 
 exports.twitterWebhook = asyncHandler(async (req, res) => {
-
-  const tweetData = req.body;
-  
+  // Respond immediately to the webhook
   res.status(200).json({
     success: true,
     message: 'Webhook received'
   });
   
   try {
-
+    const tweetData = req.body;
+    
+    logger.info('Received Twitter webhook data', { 
+      tweetId: tweetData.id_str,
+      text: tweetData.text && tweetData.text.substring(0, 50),
+      user: tweetData.user && tweetData.user.screen_name
+    });
+    
+    // Extract hashtags from the tweet
     const hashtags = tweetData.entities?.hashtags?.map(h => h.tag.toLowerCase()) || [];
     
     if (hashtags.length === 0) {
-      logger.info('Tweet has no hashtags, skipping');
-      return;
+      logger.info('Tweet has no hashtags, checking for mentions and keywords');
+      // We should also check for mentions and keywords if no hashtags
     }
     
+    // Find events that match these hashtags
+    // Modified to also properly include the # prefix that the events are storing
     const events = await Event.find({
       isActive: true,
-      'socialTracking.hashtags': { $in: hashtags.map(tag => `#${tag}`) }
+      $or: [
+        { 'socialTracking.hashtags': { $in: hashtags.map(tag => `#${tag}`) } },
+        { 'socialTracking.mentions': { $in: [tweetData.user?.screen_name] } },
+        { 'socialTracking.keywords': { $in: hashtags } }
+      ]
     });
     
     if (events.length === 0) {
-      logger.info('No matching events found for tweet hashtags');
+      logger.info('No matching events found for tweet hashtags or mentions');
       return;
     }
     
-
+    // Process the tweet for each matching event
     for (const event of events) {
+      logger.info(`Processing tweet for event: ${event.name} (${event._id})`);
+      
       const feedbackData = {
         event: event._id,
         source: 'twitter',
@@ -112,8 +126,27 @@ exports.twitterWebhook = asyncHandler(async (req, res) => {
           mentions: tweetData.entities?.user_mentions?.map(m => m.screen_name) || []
         }
       };
-
-      await feedQueue.addToQueue(feedbackData);
+      
+      // Process and store the feedback
+      try {
+        // Use feed queue if available
+        await feedQueue.addToQueue(feedbackData);
+        logger.info(`Added tweet to processing queue for event ${event._id}`);
+      } catch (queueError) {
+        logger.error(`Queue submission failed, processing directly: ${queueError.message}`, { error: queueError });
+        
+        // Direct processing as fallback
+        const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
+        const feedback = await Feedback.create(processedFeedback);
+        
+        // Generate alerts
+        const alerts = await alertGenerator.generateAlerts(feedback);
+        
+        logger.info(`Processed tweet directly: ${feedback._id}`, {
+          sentiment: feedback.sentiment,
+          alertsGenerated: alerts?.length || 0
+        });
+      }
     }
   } catch (error) {
     logger.error(`Twitter webhook processing error: ${error.message}`, { error });

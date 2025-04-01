@@ -10,11 +10,13 @@ const fs = require('fs');
 
 dotenv.config();
 
-
+// Import dependencies
 const { connectDB } = require('./config/db');  
 const logger = require('./utils/logger');
+const feedQueue = require('./services/realtime/feedQueue');
+const alertBroadcaster = require('./services/realtime/alertBroadcaster');
 
-
+// Ensure logs directory exists
 if (!fs.existsSync(path.join(__dirname, 'logs'))) {
   try {
     fs.mkdirSync(path.join(__dirname, 'logs'));
@@ -24,11 +26,11 @@ if (!fs.existsSync(path.join(__dirname, 'logs'))) {
   }
 }
 
-
+// Show environment settings
 console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`SKIP_NLP_MODELS: ${process.env.SKIP_NLP_MODELS}`);
 
-// Gracefully handle uncaught exceptions 
+// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
   logger.error('UNCAUGHT EXCEPTION:', { error: err.stack || err.message || err });
@@ -50,11 +52,14 @@ const io = socketIO(server, {
   }
 });
 
-// Import routes and middleware after setting up the app
+// Make io available globally for services that need it
+global.io = io;
+
+// Import routes and middleware
 const errorHandler = require('./middleware/errorHandler');
 const indexRoutes = require('./routes/index');
 
-// Connect to the database
+// Connect to the database and initialize services
 const initializeServer = async () => {
   try {
     // Connect to MongoDB
@@ -70,11 +75,44 @@ const initializeServer = async () => {
       logger.error('Socket initialization error:', { error });
     }
 
+    // Start feedback processing queue
+    try {
+      feedQueue.startProcessing(io);
+      console.log('Feedback processing queue started');
+    } catch (error) {
+      console.error('Feedback queue initialization error:', error.message);
+      logger.error('Feedback queue initialization error:', { error });
+    }
+
+    // Setup auto-resolve alerts processor
+    try {
+      alertBroadcaster.setupAutoResolveProcessor(io, 5); // Check every 5 minutes
+      console.log('Alert auto-resolve processor started');
+    } catch (error) {
+      console.error('Alert processor initialization error:', error.message);
+      logger.error('Alert processor initialization error:', { error });
+    }
+
+  
+    try {
+      alertBroadcaster.setupPeriodicDigests(60); // Send digests every 60 minutes
+      console.log('Periodic alert digests started');
+    } catch (error) {
+      console.error('Alert digest initialization error:', error.message);
+      logger.error('Alert digest initialization error:', { error });
+    }
+
     // Middleware
     app.use(cors());
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     app.use(morgan('dev'));
+
+ 
+    app.use((req, res, next) => {
+      req.io = io;
+      next();
+    });
 
     // Routes
     app.use('/api', indexRoutes);
@@ -87,10 +125,10 @@ const initializeServer = async () => {
       });
     }
 
-    // Error handler
+ 
     app.use(errorHandler);
 
-    // Start server
+
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
@@ -109,10 +147,10 @@ const initializeServer = async () => {
   }
 };
 
-// Start server initialization
+
 initializeServer();
 
-// Handle unhandled promise rejections
+
 process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION:', err);
   logger.error('UNHANDLED REJECTION:', { error: err.stack || err.message || err });

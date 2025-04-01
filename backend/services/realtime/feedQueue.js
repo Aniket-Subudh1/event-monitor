@@ -100,6 +100,11 @@ try {
   feedbackQueue = new InMemoryQueue();
 }
 
+/**
+ * Add feedback to the processing queue
+ * @param {Object} feedbackData - Feedback data
+ * @returns {Promise<Object>} Status of the queued job
+ */
 exports.addToQueue = async (feedbackData) => {
   try {
     const job = await feedbackQueue.add(feedbackData, {
@@ -113,7 +118,10 @@ exports.addToQueue = async (feedbackData) => {
       removeOnFail: false
     });
     
-    logger.info(`Added feedback to processing queue: ${job.id}`);
+    logger.info(`Added feedback to processing queue: ${job.id}`, {
+      source: feedbackData.source,
+      eventId: feedbackData.event
+    });
     
     return {
       success: true,
@@ -125,8 +133,14 @@ exports.addToQueue = async (feedbackData) => {
   }
 };
 
+/**
+ * Add high-priority feedback to the processing queue
+ * @param {Object} feedbackData - Feedback data
+ * @returns {Promise<Object>} Status of the queued job
+ */
 exports.addWithHighPriority = async (feedbackData) => {
   try {
+    // For direct submissions, we want faster processing
     const job = await feedbackQueue.add(feedbackData, {
       priority: 1,
       attempts: 3,
@@ -138,7 +152,10 @@ exports.addWithHighPriority = async (feedbackData) => {
       removeOnFail: false
     });
     
-    logger.info(`Added high-priority feedback to queue: ${job.id}`);
+    logger.info(`Added high-priority feedback to queue: ${job.id}`, {
+      source: feedbackData.source,
+      eventId: feedbackData.event
+    });
     
     return {
       success: true,
@@ -146,30 +163,69 @@ exports.addWithHighPriority = async (feedbackData) => {
     };
   } catch (error) {
     logger.error(`Add with high priority error: ${error.message}`, { error, feedbackData });
-    throw error;
+    
+    // If queue fails, try processing directly
+    try {
+      const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
+      const feedback = await Feedback.create(processedFeedback);
+      
+      logger.info(`Processed feedback directly after queue failure: ${feedback._id}`);
+      
+      return {
+        success: true,
+        feedback
+      };
+    } catch (processingError) {
+      logger.error(`Direct processing after queue failure also failed: ${processingError.message}`, {
+        error: processingError
+      });
+      throw processingError;
+    }
   }
 };
 
+/**
+ * Start processing the feedback queue
+ * @param {Object} io - Socket.io instance for broadcasting
+ */
 exports.startProcessing = (io) => {
   feedbackQueue.process(async (job) => {
     try {
       const feedbackData = job.data;
       
-      const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
+      logger.debug(`Processing feedback job: ${job.id}`, {
+        source: feedbackData.source,
+        eventId: feedbackData.event
+      });
       
+      // Process the feedback through sentiment analyzer
+      const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
       const feedback = await Feedback.create(processedFeedback);
       
+      // Update sentiment records
       await updateSentimentRecords(feedback);
       
+      // Generate alerts
       const alerts = await alertGenerator.generateAlerts(feedback);
       
-      socketHandler.broadcastFeedback(io, feedback);
-      
-      if (alerts && alerts.length > 0) {
-        alerts.forEach(alert => {
-          socketHandler.broadcastAlert(io, alert);
-        });
+      // Broadcast via socket
+      if (io) {
+        // Broadcast the feedback
+        socketHandler.broadcastFeedback(io, feedback);
+        
+        // Broadcast any generated alerts
+        if (alerts && alerts.length > 0) {
+          alerts.forEach(alert => {
+            socketHandler.broadcastAlert(io, alert);
+          });
+        }
       }
+      
+      logger.info(`Feedback job completed: ${job.id}`, {
+        feedbackId: feedback._id,
+        sentiment: feedback.sentiment,
+        alertsGenerated: alerts ? alerts.length : 0
+      });
       
       return {
         success: true,
@@ -193,6 +249,10 @@ exports.startProcessing = (io) => {
   logger.info('Feedback processing queue started');
 };
 
+/**
+ * Update sentiment records for trend analysis
+ * @param {Object} feedback - Feedback data
+ */
 const updateSentimentRecords = async (feedback) => {
   try {
     await SentimentRecord.updateRecord(
@@ -220,6 +280,10 @@ const updateSentimentRecords = async (feedback) => {
   }
 };
 
+/**
+ * Get current status of the queue
+ * @returns {Promise<Object>} Queue status
+ */
 exports.getQueueStatus = async () => {
   try {
     const [
@@ -249,6 +313,10 @@ exports.getQueueStatus = async () => {
   }
 };
 
+/**
+ * Clean up failed jobs older than 24 hours
+ * @returns {Promise<Number>} Number of jobs cleaned
+ */
 exports.cleanFailedJobs = async () => {
   try {
     const failedJobs = await feedbackQueue.getFailed();
@@ -267,5 +335,39 @@ exports.cleanFailedJobs = async () => {
   } catch (error) {
     logger.error(`Clean failed jobs error: ${error.message}`, { error });
     return 0;
+  }
+};
+
+/**
+ * Process some feedback immediately outside the queue
+ * @param {Object} feedbackData - Feedback data
+ * @returns {Promise<Object>} Processed feedback
+ */
+exports.processImmediately = async (feedbackData) => {
+  try {
+    // Process the feedback through sentiment analyzer
+    const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
+    const feedback = await Feedback.create(processedFeedback);
+    
+    // Update sentiment records
+    await updateSentimentRecords(feedback);
+    
+    // Generate alerts
+    const alerts = await alertGenerator.generateAlerts(feedback);
+    
+    logger.info(`Processed feedback immediately: ${feedback._id}`, {
+      source: feedbackData.source,
+      sentiment: feedback.sentiment,
+      alertsGenerated: alerts ? alerts.length : 0
+    });
+    
+    return {
+      success: true,
+      feedback,
+      alerts
+    };
+  } catch (error) {
+    logger.error(`Immediate processing error: ${error.message}`, { error, feedbackData });
+    throw error;
   }
 };
