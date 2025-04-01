@@ -5,53 +5,66 @@ const logger = require('../../utils/logger');
 
 exports.getSentimentOverview = async (eventId, options = {}) => {
   try {
-    const { startTime, endTime, timeframe = 'hour' } = options;
-    
-    const result = await SentimentRecord.aggregateEventSentiment(
-      eventId,
-      timeframe,
-      startTime,
-      endTime
-    );
-    
-    const totalFeedback = result.total;
-    
+    const { startTime, endTime } = options;
+
+    const query = { event: eventId };
+    if (startTime || endTime) {
+      query.createdAt = {};
+      if (startTime) query.createdAt.$gte = new Date(startTime);
+      if (endTime) query.createdAt.$lte = new Date(endTime);
+    }
+
+    const feedback = await Feedback.find(query);
+
+    const totalFeedback = feedback.length;
     const sentimentBreakdown = {
-      positive: {
-        count: result.positive.total,
-        percentage: totalFeedback > 0 ? (result.positive.total / totalFeedback) * 100 : 0,
-        avgScore: result.positive.avgScore
-      },
-      neutral: {
-        count: result.neutral.total,
-        percentage: totalFeedback > 0 ? (result.neutral.total / totalFeedback) * 100 : 0,
-        avgScore: result.neutral.avgScore
-      },
-      negative: {
-        count: result.negative.total,
-        percentage: totalFeedback > 0 ? (result.negative.total / totalFeedback) * 100 : 0,
-        avgScore: result.negative.avgScore
-      }
+      positive: { count: 0, percentage: 0, avgScore: 0 },
+      neutral: { count: 0, percentage: 0, avgScore: 0 },
+      negative: { count: 0, percentage: 0, avgScore: 0 },
     };
-    
-    const sourceBreakdown = Object.entries(result.sources).map(([source, count]) => ({
+    const sourceBreakdown = {};
+    const issuesBreakdown = {};
+
+    let positiveScores = 0, neutralScores = 0, negativeScores = 0;
+
+    feedback.forEach(item => {
+      sentimentBreakdown[item.sentiment].count++;
+      if (item.sentiment === 'positive') positiveScores += item.sentimentScore;
+      if (item.sentiment === 'neutral') neutralScores += item.sentimentScore;
+      if (item.sentiment === 'negative') negativeScores += item.sentimentScore;
+
+      sourceBreakdown[item.source] = (sourceBreakdown[item.source] || 0) + 1;
+
+      if (item.sentiment === 'negative' && item.issueType) {
+        issuesBreakdown[item.issueType] = (issuesBreakdown[item.issueType] || 0) + 1;
+      }
+    });
+
+    sentimentBreakdown.positive.percentage = totalFeedback > 0 ? (sentimentBreakdown.positive.count / totalFeedback) * 100 : 0;
+    sentimentBreakdown.neutral.percentage = totalFeedback > 0 ? (sentimentBreakdown.neutral.count / totalFeedback) * 100 : 0;
+    sentimentBreakdown.negative.percentage = totalFeedback > 0 ? (sentimentBreakdown.negative.count / totalFeedback) * 100 : 0;
+
+    sentimentBreakdown.positive.avgScore = sentimentBreakdown.positive.count > 0 ? positiveScores / sentimentBreakdown.positive.count : 0;
+    sentimentBreakdown.neutral.avgScore = sentimentBreakdown.neutral.count > 0 ? neutralScores / sentimentBreakdown.neutral.count : 0;
+    sentimentBreakdown.negative.avgScore = sentimentBreakdown.negative.count > 0 ? negativeScores / sentimentBreakdown.negative.count : 0;
+
+    const sources = Object.entries(sourceBreakdown).map(([source, count]) => ({
       source,
       count,
-      percentage: totalFeedback > 0 ? (count / totalFeedback) * 100 : 0
+      percentage: totalFeedback > 0 ? (count / totalFeedback) * 100 : 0,
     })).sort((a, b) => b.count - a.count);
-    
-    const issuesBreakdown = Object.entries(result.issues).map(([issue, count]) => ({
+
+    const issues = Object.entries(issuesBreakdown).map(([issue, count]) => ({
       issue,
       count,
-      percentage: result.negative.total > 0 ? (count / result.negative.total) * 100 : 0
+      percentage: sentimentBreakdown.negative.count > 0 ? (count / sentimentBreakdown.negative.count) * 100 : 0,
     })).sort((a, b) => b.count - a.count);
-    
+
     return {
       total: totalFeedback,
       sentiment: sentimentBreakdown,
-      sources: sourceBreakdown,
-      issues: issuesBreakdown,
-      timeline: result.timeline
+      sources,
+      issues,
     };
   } catch (error) {
     logger.error(`Get sentiment overview error: ${error.message}`, { error, eventId });
@@ -61,39 +74,87 @@ exports.getSentimentOverview = async (eventId, options = {}) => {
 
 exports.getSentimentTrend = async (eventId, options = {}) => {
   try {
-    const { timeframe = 'hour', limit = 24 } = options;
-    
-    const records = await SentimentRecord.find({
-      event: eventId,
-      timeframe
-    })
-    .sort({ timestamp: -1 })
-    .limit(limit);
-    
-    const timeline = records.map(record => ({
-      timestamp: record.timestamp,
-      positive: {
-        count: record.data.positive.count,
-        percentage: record.data.total > 0 ? 
-          (record.data.positive.count / record.data.total) * 100 : 0
-      },
-      neutral: {
-        count: record.data.neutral.count,
-        percentage: record.data.total > 0 ? 
-          (record.data.neutral.count / record.data.total) * 100 : 0
-      },
-      negative: {
-        count: record.data.negative.count,
-        percentage: record.data.total > 0 ? 
-          (record.data.negative.count / record.data.total) * 100 : 0
-      },
-      total: record.data.total
-    })).reverse(); // Reverse to get chronological order
-    
+    const { timeframe = 'hour', limit = 24, startTime, endTime } = options;
+
+    const query = { event: eventId };
+    if (startTime || endTime) {
+      query.createdAt = {};
+      if (startTime) query.createdAt.$gte = new Date(startTime);
+      if (endTime) query.createdAt.$lte = new Date(endTime);
+    }
+
+    const feedback = await Feedback.find(query);
+
+    const groupByTimeframe = (date) => {
+      const groupedDate = new Date(date);
+      // if (timeframe === 'minute') groupedDate.setSeconds(0, 0);
+      if (timeframe === 'hour') groupedDate.setMinutes(0, 0, 0);
+      else if (timeframe === 'day') groupedDate.setHours(0, 0, 0, 0);
+      else if (timeframe === 'week') {
+        const startOfMonth = new Date(groupedDate.getFullYear(), groupedDate.getMonth(), 1);
+        const daysSinceMonthStart = Math.floor((groupedDate - startOfMonth) / (1000 * 60 * 60 * 24));
+        const weekNumber = Math.floor(daysSinceMonthStart / 7) + 1; // Week 1, Week 2, etc.
+        groupedDate.setDate(1 + (weekNumber - 1) * 7); // Start of the week
+        groupedDate.setHours(0, 0, 0, 0);
+      }
+      return groupedDate.toISOString();
+    };
+
+    const sentimentTrend = new Map();
+
+    feedback.forEach((item) => {
+      const timeKey = groupByTimeframe(item.createdAt);
+
+      if (!sentimentTrend.has(timeKey)) {
+        sentimentTrend.set(timeKey, {
+          timestamp: new Date(timeKey),
+          positive: { count: 0, percentage: 0 },
+          neutral: { count: 0, percentage: 0 },
+          negative: { count: 0, percentage: 0 },
+          total: 0,
+        });
+      }
+
+      const record = sentimentTrend.get(timeKey);
+      record[item.sentiment].count++;
+      record.total++;
+    });
+
+    // Calculate percentages
+    sentimentTrend.forEach((record) => {
+      record.positive.percentage = record.total > 0 ? (record.positive.count / record.total) * 100 : 0;
+      record.neutral.percentage = record.total > 0 ? (record.neutral.count / record.total) * 100 : 0;
+      record.negative.percentage = record.total > 0 ? (record.negative.count / record.total) * 100 : 0;
+    });
+
+    // Convert map to sorted array
+    const timeline = Array.from(sentimentTrend.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(-limit);
+
+    // Calculate weekly totals if timeframe is 'week'
+    let weeklyTotals = null;
+    if (timeframe === 'week') {
+      weeklyTotals = {
+        positive: 0,
+        neutral: 0,
+        negative: 0,
+        total: 0,
+      };
+
+      timeline.forEach((record) => {
+        weeklyTotals.positive += record.positive.count;
+        weeklyTotals.neutral += record.neutral.count;
+        weeklyTotals.negative += record.negative.count;
+        weeklyTotals.total += record.total;
+      });
+    }
+
     return {
       timeline,
       timeframe,
-      recordCount: records.length
+      weeklyTotals,
+      recordCount: timeline.length,
     };
   } catch (error) {
     logger.error(`Get sentiment trend error: ${error.message}`, { error, eventId });

@@ -39,6 +39,15 @@ exports.getSentimentOverview = asyncHandler(async (req, res) => {
   });
 });
 
+// exports.getSentimentOverview = asyncHandler(async (req, res) => {
+//   const sentimentOverview = await sentimentAggregator.getSentimentOverview(req.params.eventId, {
+//     startTime: req.query.startTime,
+//     endTime: req.query.endTime,
+//   });
+
+//   res.status(200).json({ success: true, data: sentimentOverview });
+// });
+
 
 exports.getIssueTrend = asyncHandler(async (req, res) => {
   const { timeframe, limit } = req.query;
