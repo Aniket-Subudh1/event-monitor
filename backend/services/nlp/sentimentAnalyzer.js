@@ -4,7 +4,6 @@ const logger = require('../../utils/logger');
 const textProcessing = require('../../utils/textProcessing');
 const SentimentRecord = require('../../models/SentimentRecord');
 
-// Initialize AFINN sentiment analyzer
 const analyzer = new natural.SentimentAnalyzer('English', natural.PorterStemmer, 'afinn');
 
 /**
@@ -15,58 +14,53 @@ const analyzer = new natural.SentimentAnalyzer('English', natural.PorterStemmer,
 exports.analyzeSentiment = async (text) => {
   try {
     if (!text || text.trim() === '') {
-      return { sentiment: 'neutral', score: 0 };
+      return { sentiment: 'neutral', score: 0, method: 'default' };
     }
     
     const cleanedText = textProcessing.cleanText(text);
     
     if (cleanedText.length < 3) {
-      return { sentiment: 'neutral', score: 0 };
+      return { sentiment: 'neutral', score: 0, method: 'short-text' };
     }
     
-    // Try transformers service first
-    try {
-      const transformersResult = await transformersService.analyzeSentiment(cleanedText);
-      
-      if (!transformersResult.error) {
-        logger.debug(`Sentiment analyzed with Transformers: ${transformersResult.sentiment}`, {
-          score: transformersResult.score,
-          method: transformersResult.method
-        });
-        
-        return {
-          sentiment: transformersResult.sentiment,
-          score: transformersResult.score,
-          method: 'transformers'
-        };
-      }
-    } catch (transformersError) {
-      logger.warn(`Transformers sentiment analysis failed: ${transformersError.message}, falling back to AFINN`);
+    // Try transformers-based analysis first
+    const transformersResult = await transformersService.analyzeSentiment(cleanedText);
+    
+    if (!transformersResult.error) {
+      return {
+        sentiment: transformersResult.sentiment,
+        score: transformersResult.score,
+        method: 'transformers'
+      };
     }
     
-    // Fall back to AFINN 
+    // Fallback to AFINN if transformers fail
     const tokens = textProcessing.tokenize(cleanedText);
     const filteredTokens = textProcessing.removeStopwords(tokens);
     
-    const afinnScore = analyzer.getSentiment(filteredTokens);
+    // Extract hashtags and consider them in sentiment
+    const hashtags = textProcessing.extractHashtags(text);
+    const hashtagBoost = hashtags.reduce((acc, tag) => {
+      const lowerTag = tag.toLowerCase();
+      if (positiveHashtags.includes(lowerTag)) return acc + 0.3;
+      if (negativeHashtags.includes(lowerTag)) return acc - 0.3;
+      return acc;
+    }, 0);
+    
+    const afinnScore = analyzer.getSentiment(filteredTokens) + hashtagBoost;
     
     let sentiment, score;
-    
-    if (afinnScore > 0.2) {
+    // Adjusted thresholds for social media text
+    if (afinnScore > 0.1) {
       sentiment = 'positive';
-      score = Math.min(afinnScore / 2.5, 1); 
-    } else if (afinnScore < -0.2) {
+      score = Math.min(afinnScore / 2, 1); // Adjusted scaling
+    } else if (afinnScore < -0.1) {
       sentiment = 'negative';
-      score = Math.max(afinnScore / 2.5, -1); 
+      score = Math.max(afinnScore / 2, -1); // Adjusted scaling
     } else {
       sentiment = 'neutral';
       score = afinnScore;
     }
-    
-    logger.debug(`Sentiment analyzed with AFINN: ${sentiment}`, {
-      score,
-      afinnScore
-    });
     
     return {
       sentiment,
@@ -76,48 +70,26 @@ exports.analyzeSentiment = async (text) => {
   } catch (error) {
     logger.error(`Sentiment analysis error: ${error.message}`, { error, text });
     
-    // If all else fails, use simple keyword matching as last resort
-    const lowerText = text.toLowerCase();
-    const sentiment = lowerText.match(/good|great|excellent|amazing|love|happy|positive/i) ? 'positive' :
-                      lowerText.match(/bad|terrible|awful|hate|poor|negative|issue|problem/i) ? 'negative' : 
-                      'neutral';
-    const score = sentiment === 'positive' ? 0.7 : 
-                  sentiment === 'negative' ? -0.7 : 0;
-                      
-    return { 
-      sentiment, 
-      score, 
-      method: 'fallback-keywords'
+    return {
+      sentiment: 'neutral',
+      score: 0,
+      method: 'fallback',
+      error: error.message
     };
   }
 };
 
-/**
- * Process feedback through sentiment analysis and issue detection
- * @param {Object} feedback - Feedback data
- * @returns {Object} Processed feedback data
- */
+// Simple hashtag sentiment dictionary (expand as needed)
+const positiveHashtags = ['awesome', 'great', 'love', 'amazing', 'happy', 'best'];
+const negativeHashtags = ['terrible', 'bad', 'hate', 'awful', 'worst', 'fail'];
+
 exports.processFeedback = async (feedback) => {
   try {
     const { text } = feedback;
     
-    // Ensure we have text to analyze
-    if (!text || text.trim() === '') {
-      return {
-        ...feedback,
-        sentiment: 'neutral',
-        sentimentScore: 0,
-        issueType: null,
-        processed: true
-      };
-    }
-    
-    // Analyze sentiment
     const sentimentResult = await this.analyzeSentiment(text);
     
-    // Detect issue type for negative sentiment
     let issueResult = { issueType: null };
-    
     if (sentimentResult.sentiment === 'negative') {
       try {
         // Try transformers service first
@@ -140,29 +112,20 @@ exports.processFeedback = async (feedback) => {
     // Extract metadata from text
     const hashtags = textProcessing.extractHashtags(text);
     const mentions = textProcessing.extractMentions(text);
-    const keywords = textProcessing.extractKeywords(text, 10);
+    const keywords = textProcessing.extractKeywords(text);
     
-    // Merge metadata with existing metadata if provided
-    const mergedMetadata = {
-      ...(feedback.metadata || {}),
-      keywords: [...new Set([...(feedback.metadata?.keywords || []), ...keywords])],
-      hashTags: [...new Set([...(feedback.metadata?.hashTags || []), ...hashtags])],
-      mentions: [...new Set([...(feedback.metadata?.mentions || []), ...mentions])]
-    };
-    
-    // Log the processing result
-    logger.info(`Processed feedback sentiment: ${sentimentResult.sentiment} (${sentimentResult.score.toFixed(2)})`, {
-      feedbackSource: feedback.source,
-      issueType: issueResult.issueType,
-      textLength: text.length
-    });
-    
-    const processedFeedback = {
+    return {
       ...feedback,
       sentiment: sentimentResult.sentiment,
       sentimentScore: sentimentResult.score,
       issueType: issueResult.issueType,
-      metadata: mergedMetadata,
+      metadata: {
+        ...feedback.metadata,
+        hashTags: hashtags,
+        mentions,
+        keywords,
+        analysisMethod: sentimentResult.method // Add method for debugging
+      },
       processed: true
     };
     
@@ -178,12 +141,14 @@ exports.processFeedback = async (feedback) => {
     
     return processedFeedback;
   } catch (error) {
-    logger.error(`Feedback processing error: ${error.message}`, { error, feedbackText: feedback.text });
+    logger.error(`Feedback processing error: ${error.message}`, { 
+      error, 
+      feedback: { text: feedback.text, source: feedback.source, sourceId: feedback.sourceId } 
+    });
     
-    // Ensure we return something valid even on error
     return {
       ...feedback,
-      sentiment: 'neutral', // Default to neutral on error
+      sentiment: 'neutral',
       sentimentScore: 0,
       issueType: null,
       processed: false,
@@ -192,20 +157,25 @@ exports.processFeedback = async (feedback) => {
   }
 };
 
-/**
- * Process multiple feedback items in batch
- * @param {Array} feedbackItems - Array of feedback data
- * @returns {Array} Processed feedback items
- */
 exports.batchProcessFeedback = async (feedbackItems) => {
   try {
     const processedItems = await Promise.all(
       feedbackItems.map(item => this.processFeedback(item))
     );
     
+    // Log summary for batch processing
+    const summary = {
+      total: processedItems.length,
+      positive: processedItems.filter(item => item.sentiment === 'positive').length,
+      negative: processedItems.filter(item => item.sentiment === 'negative').length,
+      neutral: processedItems.filter(item => item.sentiment === 'neutral').length,
+      errors: processedItems.filter(item => item.processingError).length
+    };
+    logger.info('Batch processing completed', { summary });
+    
     return processedItems;
   } catch (error) {
-    logger.error(`Batch processing error: ${error.message}`, { error });
+    logger.error(`Batch processing error: ${error.message}`, { error, itemCount: feedbackItems.length });
     throw error;
   }
 };

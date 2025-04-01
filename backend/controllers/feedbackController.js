@@ -69,7 +69,9 @@ exports.submitFeedback = asyncHandler(async (req, res) => {
 });
 
 exports.twitterWebhook = asyncHandler(async (req, res) => {
-  // Respond immediately to the webhook
+
+  const tweetData = req.body;
+  
   res.status(200).json({
     success: true,
     message: 'Webhook received'
@@ -88,27 +90,21 @@ exports.twitterWebhook = asyncHandler(async (req, res) => {
     const hashtags = tweetData.entities?.hashtags?.map(h => h.tag.toLowerCase()) || [];
     
     if (hashtags.length === 0) {
-      logger.info('Tweet has no hashtags, checking for mentions and keywords');
-      // We should also check for mentions and keywords if no hashtags
-    }
-    
-    // Find events that match these hashtags
-    // Modified to also properly include the # prefix that the events are storing
-    const events = await Event.find({
-      isActive: true,
-      $or: [
-        { 'socialTracking.hashtags': { $in: hashtags.map(tag => `#${tag}`) } },
-        { 'socialTracking.mentions': { $in: [tweetData.user?.screen_name] } },
-        { 'socialTracking.keywords': { $in: hashtags } }
-      ]
-    });
-    
-    if (events.length === 0) {
-      logger.info('No matching events found for tweet hashtags or mentions');
+      logger.info('Tweet has no hashtags, skipping');
       return;
     }
     
-    // Process the tweet for each matching event
+    const events = await Event.find({
+      isActive: true,
+      'socialTracking.hashtags': { $in: hashtags.map(tag => `#${tag}`) }
+    });
+    
+    if (events.length === 0) {
+      logger.info('No matching events found for tweet hashtags');
+      return;
+    }
+    
+
     for (const event of events) {
       logger.info(`Processing tweet for event: ${event.name} (${event._id})`);
       
@@ -273,13 +269,21 @@ exports.linkedinWebhook = asyncHandler(async (req, res) => {
 
 
 exports.getEventFeedback = asyncHandler(async (req, res) => {
+  const eventId = req.params.eventId;
 
-  
+  if (!eventId || eventId === 'undefined') {
+    logger.error('Invalid eventId provided:', { eventId });
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid or missing event ID'
+    });
+  }
+
   const query = {
-    event: req.params.eventId
+    event: eventId
   };
-  
 
+  // Apply filters if provided
   if (req.query.sentiment) {
     query.sentiment = req.query.sentiment;
   }
@@ -292,7 +296,6 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     query.issueType = req.query.issueType;
   }
   
-
   if (req.query.startDate || req.query.endDate) {
     query.createdAt = {};
     
@@ -305,25 +308,23 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     }
   }
   
-
   if (req.query.search) {
     query.$text = { $search: req.query.search };
   }
-  
 
+  // Pagination
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 50;
   const startIndex = (page - 1) * limit;
   
- 
-  const total = await Feedback.countDocuments(query);
-  
+  logger.info('Fetching feedback with filters', { query, page, limit });
 
+  const total = await Feedback.countDocuments(query);
   const feedback = await Feedback.find(query)
     .skip(startIndex)
     .limit(limit)
     .sort({ createdAt: req.query.sort === 'asc' ? 1 : -1 });
-  
+
   res.status(200).json({
     success: true,
     count: feedback.length,
@@ -336,7 +337,6 @@ exports.getEventFeedback = asyncHandler(async (req, res) => {
     data: feedback
   });
 });
-
 
 exports.getEventFeedbackStats = asyncHandler(async (req, res) => {
   const sentimentStats = await Feedback.aggregate([

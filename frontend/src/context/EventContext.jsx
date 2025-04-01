@@ -12,9 +12,7 @@ export const EventProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [lastFetchTime, setLastFetchTime] = useState(null);
 
-  // Use useCallback to memoize the fetchEvents function to prevent recreation on each render
   const fetchEvents = useCallback(async () => {
-    // Debounce fetches - don't fetch if we've fetched in the last second
     const now = Date.now();
     if (lastFetchTime && now - lastFetchTime < 1000) {
       return;
@@ -26,10 +24,12 @@ export const EventProvider = ({ children }) => {
       setLastFetchTime(now);
       
       const response = await eventService.getEvents({ active: true });
+      console.log('Fetched events:', response.data); // Debug log
       setEvents(response.data);
       
       // Select first event if none selected
       if (response.data.length > 0 && !selectedEvent) {
+        console.log('Setting default selected event:', response.data[0]);
         setSelectedEvent(response.data[0]);
       }
     } catch (err) {
@@ -40,29 +40,31 @@ export const EventProvider = ({ children }) => {
     }
   }, [lastFetchTime, selectedEvent]);
 
-  // Load events when user changes
   useEffect(() => {
     if (user) {
       fetchEvents();
     }
   }, [user, fetchEvents]);
 
-  // Load selected event from localStorage - only once on component mount
   useEffect(() => {
     if (events.length > 0 && !selectedEvent) {
       const savedEventId = localStorage.getItem('selectedEventId');
       if (savedEventId) {
         const event = events.find(e => e._id === savedEventId);
         if (event) {
+          console.log('Restoring selected event from localStorage:', event);
           setSelectedEvent(event);
+        } else {
+          console.log('No matching event found for saved ID:', savedEventId);
+          setSelectedEvent(events[0]); // Fallback to first event
         }
       }
     }
   }, [events, selectedEvent]);
 
-  // Save selected event to localStorage
   useEffect(() => {
     if (selectedEvent) {
+      console.log('Selected event updated:', selectedEvent);
       localStorage.setItem('selectedEventId', selectedEvent._id);
     }
   }, [selectedEvent]);
@@ -91,7 +93,6 @@ export const EventProvider = ({ children }) => {
         event._id === eventId ? updatedEvent : event
       )));
       
-      // Update selected event if it's the one updated
       if (selectedEvent && selectedEvent._id === eventId) {
         setSelectedEvent(updatedEvent);
       }
@@ -112,9 +113,8 @@ export const EventProvider = ({ children }) => {
       await eventService.deleteEvent(eventId);
       setEvents(prev => prev.filter(event => event._id !== eventId));
       
-      // Clear selected event if it's the one deleted
       if (selectedEvent && selectedEvent._id === eventId) {
-        setSelectedEvent(null);
+        setSelectedEvent(events.length > 1 ? events[0] : null); // Set to first event or null
         localStorage.removeItem('selectedEventId');
       }
       
@@ -133,12 +133,10 @@ export const EventProvider = ({ children }) => {
       setError(null);
       const result = await eventService.toggleEventActive(eventId);
       
-      // Update events list
       setEvents(prev => prev.map(event => (
         event._id === eventId ? { ...event, isActive: result.isActive } : event
       )));
       
-      // Update selected event if it's the one toggled
       if (selectedEvent && selectedEvent._id === eventId) {
         setSelectedEvent(prev => ({ ...prev, isActive: result.isActive }));
       }
