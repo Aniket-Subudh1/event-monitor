@@ -213,7 +213,6 @@ exports.configureInstagramHashtags = asyncHandler(async (req, res) => {
     });
   }
   
-  // Check if event exists
   const event = await Event.findById(req.params.eventId);
   
   if (!event) {
@@ -223,7 +222,6 @@ exports.configureInstagramHashtags = asyncHandler(async (req, res) => {
     });
   }
   
-  // Check if user has access to this event
   if (
     req.user.role !== 'admin' &&
     event.owner.toString() !== req.user.id && 
@@ -235,7 +233,6 @@ exports.configureInstagramHashtags = asyncHandler(async (req, res) => {
     });
   }
   
-  // Update event hashtags
   const formattedHashtags = hashtags.map(tag => 
     tag.startsWith('#') ? tag : `#${tag}`
   );
@@ -243,21 +240,32 @@ exports.configureInstagramHashtags = asyncHandler(async (req, res) => {
   event.socialTracking.hashtags = formattedHashtags;
   await event.save();
   
-  // Start Instagram polling if not already active
   try {
     const pollStatus = await instagramService.startEventPolling(req.params.eventId);
+    
+    // Fetch initial sentiment results
+    const latestPosts = await instagramService.fetchLatestPostsForEvent(req.params.eventId);
+    const feedbacks = await Feedback.find({ event: req.params.eventId, source: 'instagram' })
+      .sort({ createdAt: -1 })
+      .limit(10); // Limit to recent posts for efficiency
+    
+    const sentimentSummary = {
+      positive: feedbacks.filter(f => f.sentiment === 'positive').length,
+      negative: feedbacks.filter(f => f.sentiment === 'negative').length,
+      neutral: feedbacks.filter(f => f.sentiment === 'neutral').length
+    };
     
     res.status(200).json({
       success: true,
       data: {
         hashtags: formattedHashtags,
-        polling: pollStatus
+        polling: pollStatus,
+        sentimentSummary
       }
     });
   } catch (error) {
     logger.error(`Instagram polling error: ${error.message}`, { error });
     
-    // Still return success since hashtags were saved
     res.status(200).json({
       success: true,
       data: {
@@ -265,7 +273,8 @@ exports.configureInstagramHashtags = asyncHandler(async (req, res) => {
         polling: {
           isActive: false,
           error: error.message
-        }
+        },
+        sentimentSummary: null
       }
     });
   }
@@ -398,7 +407,6 @@ exports.configureLinkedInCompany = asyncHandler(async (req, res) => {
  * @access  Private
  */
 exports.getIntegrationSettings = asyncHandler(async (req, res) => {
-  // Check if event exists
   const event = await Event.findById(req.params.eventId);
   
   if (!event) {
@@ -408,7 +416,6 @@ exports.getIntegrationSettings = asyncHandler(async (req, res) => {
     });
   }
   
-  // Check if user has access to this event
   if (
     req.user.role !== 'admin' &&
     event.owner.toString() !== req.user.id && 
@@ -420,10 +427,18 @@ exports.getIntegrationSettings = asyncHandler(async (req, res) => {
     });
   }
   
-  // Get stream/poll status
   const twitterStreamStatus = twitterService.getStreamStatus(req.params.eventId);
   const instagramPollStatus = instagramService.getPollStatus(req.params.eventId);
   const linkedinPollStatus = linkedinService.getPollStatus(req.params.eventId);
+  
+  // Fetch sentiment summary for Instagram
+  const feedbacks = await Feedback.find({ event: req.params.eventId, source: 'instagram' });
+  const sentimentSummary = {
+    positive: feedbacks.filter(f => f.sentiment === 'positive').length,
+    negative: feedbacks.filter(f => f.sentiment === 'negative').length,
+    neutral: feedbacks.filter(f => f.sentiment === 'neutral').length,
+    total: feedbacks.length
+  };
   
   res.status(200).json({
     success: true,
@@ -436,7 +451,10 @@ exports.getIntegrationSettings = asyncHandler(async (req, res) => {
       integrations: event.integrations,
       status: {
         twitter: twitterStreamStatus,
-        instagram: instagramPollStatus,
+        instagram: {
+          ...instagramPollStatus,
+          sentimentSummary
+        },
         linkedin: linkedinPollStatus
       }
     }
