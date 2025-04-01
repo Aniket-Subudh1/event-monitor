@@ -5,6 +5,8 @@ import { Button } from '../components/common/Button';
 import { Loader } from '../components/common/Loader';
 import SentimentChart from '../components/charts/SentimentChart';
 import analyticsService from '../services/analyticsService';
+import { useLocation, useParams } from 'react-router-dom';
+import { useCallback } from 'react';
 import {
   BarChart2,
   PieChart,
@@ -19,7 +21,8 @@ import {
   RefreshCw
 } from 'react-feather';
 
-const AnalyticsDashboard = ({ selectedEvent }) => {
+const AnalyticsDashboard = () => {
+  const { selectedEvent: contextEvent, events } = useContext(EventContext);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -29,26 +32,53 @@ const AnalyticsDashboard = ({ selectedEvent }) => {
   const [wordCloudData, setWordCloudData] = useState([]);
   const [wordCloudLoading, setWordCloudLoading] = useState(false);
   
-  useEffect(() => {
-    if (selectedEvent) {
-      fetchEventSummary();
-    }
-  }, [selectedEvent]);
+  const location = useLocation();
+  const { eventId } = useParams();
+  const eventFromState = location.state?.event;
+
+  const selectedEvent = eventFromState || 
+  (eventId && events.find(e => e.id === eventId || e._id === eventId)) || 
+  contextEvent;
+
+
   
-  const fetchEventSummary = async () => {
+  const fetchEventSummary = useCallback(async () => {
+    
+    const effectiveEventId = selectedEvent?._id || selectedEvent?.id; // Support _id or id
+    if (!effectiveEventId) {
+      setError('Cannot fetch summary: Event ID is undefined');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const data = await analyticsService.getEventSummary(selectedEvent.id);
+      console.log('Fetching summary for event ID:', effectiveEventId);
+      const data = await analyticsService.getEventSummary(effectiveEventId);
+      console.log('API Response:', data);
       setSummary(data);
     } catch (err) {
       console.error('Error fetching event summary:', err);
-      setError('Failed to load analytics data. Please try again.');
+      setError('Failed to load analytics data: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
-  };
-  
+  }, [selectedEvent]); // Depend on selectedEvent object
+
+  useEffect(() => {
+    console.log('Event from State:', eventFromState);
+    console.log('Event ID from URL:', eventId);
+    console.log('Selected Event:', selectedEvent);
+    const effectiveEventId = selectedEvent?._id || selectedEvent?.id;
+    if (effectiveEventId) {
+      fetchEventSummary();
+    } else {
+      setError('No event selected. Please select an event from the navbar or events page.');
+      setLoading(false);
+    }
+  }, [selectedEvent, fetchEventSummary]); 
+
   const handleExportData = async () => {
     try {
       const format = 'csv'; // or 'json'
@@ -287,7 +317,7 @@ const AnalyticsDashboard = ({ selectedEvent }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <SentimentChart 
-              eventId={selectedEvent.id} 
+              eventId={selectedEvent._id || selectedEvent.id}
               timeframe={selectedTimeframe} 
               height={300} 
             />

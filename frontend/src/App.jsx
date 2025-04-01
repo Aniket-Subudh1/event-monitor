@@ -118,7 +118,7 @@ function App() {
                       } 
                     />
                     <Route 
-                      path="/analytics" 
+                      path="/analytics/:eventId?"
                       element={
                         <ProtectedRoute>
                           <Analytics />

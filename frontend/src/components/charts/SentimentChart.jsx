@@ -75,11 +75,24 @@ const SentimentChart = ({ eventId, timeframe = 'day', height = 300 }) => {
   
   useEffect(() => {
     const fetchSentimentData = async () => {
+      if (!eventId) {
+        console.log('No event ID provided');
+        setLoading(false);
+        return;
+      }else{
+        console.log("Event id is provided")
+      }
       try {
         setLoading(true);
         setError(null);
         const data = await analyticsService.getSentimentTrend(eventId, timeframe);
-        setChartData(data.timeline || []);
+        const transformedData = data.timeline.map(item => ({
+          timestamp: new Date(item.timestamp).getTime(), // Ensure timestamp is in milliseconds
+          positive: item.positive.count,
+          neutral: item.neutral.count,
+          negative: item.negative.count,
+        }));
+        setChartData(transformedData);
       } catch (err) {
         console.error('Error fetching sentiment data:', err);
         setError('Failed to load sentiment data');
