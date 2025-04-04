@@ -4,9 +4,8 @@ import { Loader } from '../common/Loader';
 import { Map, MapPin, AlertCircle } from 'react-feather';
 
 const getColorIntensity = (count, max) => {
-  // Calculate color intensity based on count relative to max
   const ratio = Math.min(count / (max || 1), 1);
-  return Math.floor(255 - (ratio * 200)); // Higher count = more red (lower value)
+  return Math.floor(255 - (ratio * 200)); 
 };
 
 const LocationHeatmapItem = ({ location, count, maxCount, issues }) => {

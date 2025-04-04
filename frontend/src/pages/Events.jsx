@@ -12,11 +12,15 @@ const EventForm = ({ event, onSubmit, onCancel }) => {
     description: '',
     location: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    socialTracking: {
+      hashtags: []
+    }
   });
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hashtagInput, setHashtagInput] = useState('');
   
   useEffect(() => {
     if (event) {
@@ -29,7 +33,10 @@ const EventForm = ({ event, onSubmit, onCancel }) => {
         description: event.description || '',
         location: event.location || '',
         startDate: startDate.toISOString().split('T')[0] || '',
-        endDate: endDate.toISOString().split('T')[0] || ''
+        endDate: endDate.toISOString().split('T')[0] || '',
+        socialTracking: {
+          hashtags: event.socialTracking?.hashtags || []
+        }
       });
     }
   }, [event]);
@@ -41,11 +48,36 @@ const EventForm = ({ event, onSubmit, onCancel }) => {
     });
   };
   
+  const addHashtag = () => {
+    if (!hashtagInput) return;
+    const formatted = hashtagInput.startsWith('#') ? hashtagInput : `#${hashtagInput}`;
+    if (!formData.socialTracking.hashtags.includes(formatted)) {
+      setFormData({
+        ...formData,
+        socialTracking: {
+          ...formData.socialTracking,
+          hashtags: [...formData.socialTracking.hashtags, formatted]
+        }
+      });
+    }
+    setHashtagInput('');
+  };
+  
+  const removeHashtag = (tag) => {
+    setFormData({
+      ...formData,
+      socialTracking: {
+        ...formData.socialTracking,
+        hashtags: formData.socialTracking.hashtags.filter(t => t !== tag)
+      }
+    });
+  };
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.name || !formData.description || !formData.location || !formData.startDate || !formData.endDate) {
-      setError('Please fill in all fields');
+      setError('Please fill in all required fields');
       return;
     }
     
@@ -150,6 +182,48 @@ const EventForm = ({ event, onSubmit, onCancel }) => {
             />
           </div>
         </div>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Hashtags
+          </label>
+          <div className="flex">
+            <input
+              type="text"
+              className="focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md rounded-r-none"
+              placeholder="Add hashtag (e.g., #EventName)"
+              value={hashtagInput}
+              onChange={(e) => setHashtagInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addHashtag())}
+            />
+            <button
+              type="button"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              onClick={addHashtag}
+            >
+              Add
+            </button>
+          </div>
+          
+          <div className="mt-2 flex flex-wrap gap-2">
+            {formData.socialTracking.hashtags.map((tag, index) => (
+              <span 
+                key={index}
+                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+              >
+                {tag}
+                <button
+                  type="button"
+                  className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-500"
+                  onClick={() => removeHashtag(tag)}
+                >
+                  <span className="sr-only">Remove</span>
+                  &times;
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
       
       <div className="mt-5 flex justify-end space-x-3">
@@ -229,6 +303,19 @@ const EventCard = React.memo(({ event, onEdit, onDelete, onToggleActive, onSelec
             <Clock size={16} className="mr-2" />
             <span>{timeStatus}</span>
           </div>
+          
+          {event.socialTracking?.hashtags && event.socialTracking.hashtags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {event.socialTracking.hashtags.map((tag, index) => (
+                <span 
+                  key={index}
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       
