@@ -4,6 +4,7 @@ const Alert = require('../../models/Alert');
 const sentimentAnalyzer = require('../nlp/sentimentAnalyzer');
 const alertGenerator = require('../alert/alertGenerator');
 const logger = require('../../utils/logger');
+const ChatMessage = require('../../models/Chat');
 
 // Map to track connected clients by event
 const connectedClients = new Map();
@@ -17,6 +18,7 @@ exports.setupEventHandlers = (io, socket) => {
   /**
    * Handle joining an event room
    */
+
   socket.on('join-event', async (data) => {
     try {
       const { eventId, userId } = data;
@@ -61,6 +63,151 @@ exports.setupEventHandlers = (io, socket) => {
   /**
    * Handle leaving an event room
    */
+  // Add to the existing setupEventHandlers function
+socket.on('join-chat', async (data) => {
+  try {
+    const { eventId, user } = data;
+    
+    if (!eventId) {
+      return socket.emit('error', { message: 'Event ID is required' });
+    }
+    
+    // Join the chat room for this event
+    socket.join(`chat:${eventId}`);
+    
+    // Notify the room that a user joined
+    socket.to(`chat:${eventId}`).emit('user-joined', {
+      user,
+      timestamp: new Date()
+    });
+    
+    socket.emit('joined-chat', {
+      eventId,
+      timestamp: new Date()
+    });
+    
+    logger.info(`Socket ${socket.id} joined chat for event: ${eventId}`, { user });
+  } catch (error) {
+    logger.error(`Join chat error: ${error.message}`, { error, socketId: socket.id });
+    socket.emit('error', { message: 'Failed to join chat' });
+  }
+});
+
+socket.on('leave-chat', (data) => {
+  try {
+    const { eventId, user } = data;
+    
+    if (!eventId) {
+      return socket.emit('error', { message: 'Event ID is required' });
+    }
+    
+    // Leave the chat room
+    socket.leave(`chat:${eventId}`);
+    
+    // Notify the room that a user left
+    socket.to(`chat:${eventId}`).emit('user-left', {
+      user,
+      timestamp: new Date()
+    });
+    
+    socket.emit('left-chat', {
+      eventId,
+      timestamp: new Date()
+    });
+    
+    logger.info(`Socket ${socket.id} left chat for event: ${eventId}`, { user });
+  } catch (error) {
+    logger.error(`Leave chat error: ${error.message}`, { error, socketId: socket.id });
+    socket.emit('error', { message: 'Failed to leave chat' });
+  }
+});
+
+socket.on('chat-message', async (data) => {
+  try {
+    const { eventId, message, user, userId } = data;
+    
+    if (!eventId || !message || !user) {
+      return socket.emit('error', { message: 'Event ID, message, and user are required' });
+    }
+    
+    const chatMessage = new ChatMessage({
+      event: eventId,
+      user,
+      userId,
+      message,
+      metadata: {
+        platform: 'socket',
+        userAgent: socket.handshake.headers['user-agent'],
+        ipAddress: socket.handshake.address
+      }
+    });
+    
+    try {
+      const sentimentResult = await sentimentAnalyzer.analyzeSentiment(message);
+      chatMessage.sentiment = sentimentResult.sentiment;
+      chatMessage.sentimentScore = sentimentResult.score;
+      chatMessage.isProcessed = true;
+    } catch (error) {
+      logger.error(`Socket chat sentiment analysis error: ${error.message}`, { error });
+    }
+    
+    await chatMessage.save();
+    
+    // Broadcast to all clients in the chat room
+    io.to(`chat:${eventId}`).emit('new-message', chatMessage);
+    
+    // If message is negative, process it for feedback and alerts
+    if (chatMessage.sentiment === 'negative') {
+      try {
+        const feedbackData = {
+          event: eventId,
+          source: 'app_chat',
+          text: message,
+          metadata: {
+            username: user,
+            userId: userId,
+            platform: 'chat'
+          }
+        };
+        
+        const processedFeedback = await sentimentAnalyzer.processFeedback(feedbackData);
+        processedFeedback.sourceId = chatMessage._id.toString();
+        
+        const feedback = await Feedback.create(processedFeedback);
+        
+        // Generate alerts if sentiment is negative
+        const alerts = await alertGenerator.generateAlerts(feedback);
+        
+        // Broadcast feedback and alerts
+        io.to(`event:${eventId}`).emit('new-feedback', feedback);
+        
+        if (alerts && alerts.length > 0) {
+          alerts.forEach(alert => {
+            io.to(`alerts:${eventId}`).emit('new-alert', alert);
+          });
+        }
+        
+        logger.info(`Created feedback from socket chat message: ${feedback._id}`, {
+          chatId: chatMessage._id,
+          sentiment: feedback.sentiment,
+          alertsGenerated: alerts ? alerts.length : 0
+        });
+      } catch (error) {
+        logger.error(`Error creating feedback from socket chat: ${error.message}`, { error });
+      }
+    }
+    
+    // Confirm receipt to sender
+    socket.emit('message-received', {
+      id: chatMessage._id,
+      timestamp: chatMessage.createdAt
+    });
+    
+  } catch (error) {
+    logger.error(`Socket chat message error: ${error.message}`, { error, socketId: socket.id });
+    socket.emit('error', { message: 'Failed to send message' });
+  }
+});
   socket.on('leave-event', (data) => {
     try {
       const { eventId } = data;

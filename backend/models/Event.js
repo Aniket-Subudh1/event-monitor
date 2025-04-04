@@ -58,6 +58,11 @@ const EventSchema = new mongoose.Schema({
       keywords: [String] 
     }]
   },
+  qrCode: {
+    url: String,
+    landingUrl: String,
+    generatedAt: Date
+  },
   alertSettings: {
     negativeSentimentThreshold: {
       type: Number,
