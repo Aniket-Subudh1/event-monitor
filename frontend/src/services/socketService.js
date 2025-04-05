@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import axios from 'axios';
 
 class SocketService {
   constructor() {
@@ -7,25 +8,23 @@ class SocketService {
     this.listeners = {};
     this.connectedEvents = new Set();
     this.socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+
+    // Ensure axios baseURL is set
+    axios.defaults.baseURL = this.socketUrl;
   }
 
-  /**
-   * Initialize the socket connection
-   * @returns {Promise} Promise resolving to a socket instance
-   */
   connect() {
     return new Promise((resolve, reject) => {
       if (this.socket && this.isConnected) {
         return resolve(this.socket);
       }
 
-      // Disconnect existing socket if it exists
       if (this.socket) {
         this.socket.disconnect();
       }
 
       const token = localStorage.getItem('token');
-      
+
       this.socket = io(this.socketUrl, {
         auth: { token },
         transports: ['websocket', 'polling'],
@@ -57,16 +56,12 @@ class SocketService {
         console.error('Socket error:', error);
       });
 
-      // Setup heartbeat response
       this.socket.on('heartbeat', (data) => {
         console.log('Heartbeat received:', data.timestamp);
       });
     });
   }
 
-  /**
-   * Disconnect the socket
-   */
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();
@@ -76,10 +71,6 @@ class SocketService {
     }
   }
 
-  /**
-   * Join an event channel
-   * @param {string} eventId - Event ID to join
-   */
   joinEvent(eventId) {
     if (!this.socket || !this.isConnected) {
       console.warn('Socket not connected when trying to join event:', eventId);
@@ -96,10 +87,6 @@ class SocketService {
     this.connectedEvents.add(eventId);
   }
 
-  /**
-   * Leave an event channel
-   * @param {string} eventId - Event ID to leave
-   */
   leaveEvent(eventId) {
     if (!this.socket || !this.isConnected) {
       return;
@@ -114,10 +101,6 @@ class SocketService {
     this.connectedEvents.delete(eventId);
   }
 
-  /**
-   * Subscribe to alerts for an event
-   * @param {string} eventId - Event ID
-   */
   subscribeToAlerts(eventId) {
     if (!this.socket || !this.isConnected) {
       console.warn('Socket not connected when trying to subscribe to alerts for event:', eventId);
@@ -134,41 +117,20 @@ class SocketService {
   }
 
   /**
-   * Submit feedback via socket
-   * @param {Object} feedback - Feedback data
+   * Submit feedback via REST API instead of socket
+   * @param {Object} feedback - { event, text, user }
+   * @returns {Promise}
    */
-  submitFeedback(feedback) {
-    if (!this.socket || !this.isConnected) {
-      console.warn('Socket not connected');
-      return Promise.reject('Socket not connected');
+  async submitFeedback(feedback) {
+    try {
+      const res = await axios.post('/api/feedback/submit', feedback);
+      return res.data;
+    } catch (err) {
+      console.error('submitFeedback error:', err?.response?.data || err.message);
+      throw err;
     }
-
-    return new Promise((resolve, reject) => {
-      this.socket.emit('submit-feedback', feedback);
-      
-      // Set up one-time listener for feedback confirmation
-      this.socket.once('feedback-received', (data) => {
-        resolve(data);
-      });
-      
-      // Set up one-time listener for errors
-      this.socket.once('error', (error) => {
-        reject(error);
-      });
-      
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        reject('Timeout while submitting feedback');
-      }, 5000);
-    });
   }
 
-  /**
-   * Update an alert via socket
-   * @param {string} alertId - Alert ID
-   * @param {string} status - New status
-   * @param {string} note - Optional note
-   */
   updateAlert(alertId, status, note = '') {
     if (!this.socket || !this.isConnected) {
       console.warn('Socket not connected');
@@ -176,34 +138,27 @@ class SocketService {
     }
 
     return new Promise((resolve, reject) => {
-      this.socket.emit('update-alert', { 
-        alertId, 
-        status, 
+      this.socket.emit('update-alert', {
+        alertId,
+        status,
         note,
         userId: this.getUserId()
       });
-      
-      // Set up one-time listener for confirmation
+
       this.socket.once('alert-update-confirmed', (data) => {
         resolve(data);
       });
-      
-      // Set up one-time listener for errors
+
       this.socket.once('error', (error) => {
         reject(error);
       });
-      
-      // Timeout after 5 seconds
+
       setTimeout(() => {
         reject('Timeout while updating alert');
       }, 5000);
     });
   }
 
-  /**
-   * Get the current user ID from localStorage
-   * @returns {string|null} User ID
-   */
   getUserId() {
     try {
       const userData = localStorage.getItem('user');
@@ -218,45 +173,32 @@ class SocketService {
     }
   }
 
-  /**
-   * Add a listener for a socket event
-   * @param {string} event - Event name
-   * @param {Function} callback - Callback function
-   */
   on(event, callback) {
     if (!this.socket) {
       console.warn('Socket not initialized');
       return;
     }
 
-    // Store the callback in our listeners map
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
-    
+
     this.listeners[event].push(callback);
     this.socket.on(event, callback);
   }
 
-  /**
-   * Remove a listener for a socket event
-   * @param {string} event - Event name
-   * @param {Function} callback - Callback function to remove (optional)
-   */
   off(event, callback) {
     if (!this.socket) {
       return;
     }
 
     if (callback && this.listeners[event]) {
-      // Remove specific callback
       const index = this.listeners[event].indexOf(callback);
       if (index !== -1) {
         this.listeners[event].splice(index, 1);
         this.socket.off(event, callback);
       }
     } else if (this.listeners[event]) {
-      // Remove all callbacks for this event
       this.listeners[event].forEach(cb => {
         this.socket.off(event, cb);
       });
@@ -264,16 +206,10 @@ class SocketService {
     }
   }
 
-  /**
-   * Check if socket is connected
-   * @returns {boolean} Connection status
-   */
   getConnectionStatus() {
     return this.isConnected;
   }
 }
 
-// Create a singleton instance
 const socketService = new SocketService();
-
 export default socketService;

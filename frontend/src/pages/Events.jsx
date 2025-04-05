@@ -5,6 +5,8 @@ import { Button } from '../components/common/Button';
 import { Modal } from '../components/common/Modal';
 import { Loader } from '../components/common/Loader';
 import { Calendar, MapPin, Clock, Edit, Trash2, Power, ZapOff } from 'react-feather';
+import { QRCodeCanvas } from 'qrcode.react';
+
 
 const EventForm = ({ event, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -283,7 +285,18 @@ const EventCard = React.memo(({ event, onEdit, onDelete, onToggleActive, onSelec
             {event.isActive ? 'Active' : 'Inactive'}
           </div>
         </div>
-        
+        {event._id && (
+  <div className="mt-4">
+    <QRCodeCanvas
+      value={`${window.location.origin}/event/${event._id}/engage`}
+      size={96}
+      level="H"
+      includeMargin={true}
+    />
+  </div>
+)}
+
+
         <p className="mt-1 text-sm text-gray-600 line-clamp-2">{event.description}</p>
         
         <div className="mt-4 space-y-2">

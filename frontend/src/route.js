@@ -10,6 +10,7 @@ import Analytics from './pages/Analytics';
 import Integrations from './pages/Integrations';
 import Settings from './pages/Settings';
 import NotFound from './pages/NotFound';
+import EngagementLanding from './pages/EngagementLanding';
 
 
 import Login from './pages/auth/Login';
@@ -72,7 +73,10 @@ const routes = [
     path: '/settings',
     element: <ProtectedRoute><Settings /></ProtectedRoute>
   },
-  
+  {
+    path: '/event/:eventId/engage',
+    element: <EngagementLanding />
+  },
   {
     path: '*',
     element: <NotFound />
