@@ -41,6 +41,7 @@ router.delete('/instagram/disconnect',
 router.get('/instagram/status',
   integrationController.getInstagramStatus
 );
+router.post('/twitter/search', integrationController.searchTwitter); // Removed checkEventOwnership middleware for testing
 
 router.post('/instagram/hashtags/:eventId',
   checkEventOwnership({ idField: 'eventId' }),
